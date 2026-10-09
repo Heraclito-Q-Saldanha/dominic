@@ -3,6 +3,7 @@ mod error;
 use clap::Parser;
 use clap::Subcommand;
 
+use std::env;
 use std::fs;
 use std::path;
 
@@ -48,18 +49,52 @@ fn main() -> error::Result<()> {
 	let Cargo::Dominic(command) = Cargo::parse();
 
 	match command {
-		Dominic::New { name } => create_project(&name),
-		Dominic::Init => init_project(),
-		Dominic::Run { port } => run_project(port),
-		Dominic::Build => build_project(),
-		Dominic::Expand { out } => expand_project(&out),
+		Dominic::New { name } => {
+			log::info!("Creating project: {}", name);
+
+			create_project(&name)
+		}
+		Dominic::Init => {
+			log::info!("Initializing project");
+
+			let Ok(path) = env::current_dir() else {
+				return Err(error::Error::InvalidFilePath);
+			};
+
+			init_project(&path)
+		}
+		Dominic::Run { port } => {
+			log::info!("Running on port: {}", port);
+
+			run_project(port)
+		}
+		Dominic::Build => {
+			log::info!("Building project");
+
+			build_project()
+		}
+		Dominic::Expand { out } => {
+			log::info!("Expanding to output: {:?}", out);
+
+			expand_project(&out)
+		}
 	}
 }
 
 fn create_project(name: &str) -> error::Result<()> {
-	log::info!("Creating project: {}", name);
-
 	let path = path::PathBuf::from(name);
+
+	fs::create_dir_all(&path)?;
+
+	init_project(&path)
+}
+
+fn init_project(path: &path::Path) -> error::Result<()> {
+	let Some(name) = path.file_name() else {
+		return Err(error::Error::InvalidFilePath);
+	};
+
+	let name = name.to_string_lossy().to_string();
 
 	fs::create_dir_all(&path)?;
 	fs::create_dir_all(&path.join("src"))?;
@@ -81,26 +116,14 @@ fn create_project(name: &str) -> error::Result<()> {
 	Ok(())
 }
 
-fn init_project() -> error::Result<()> {
-	log::info!("Initializing project");
-
-	Ok(())
-}
-
 fn run_project(port: u16) -> error::Result<()> {
-	log::info!("Running on port: {}", port);
-
 	Ok(())
 }
 
 fn build_project() -> error::Result<()> {
-	log::info!("Building project");
-
 	Ok(())
 }
 
 fn expand_project(out: &path::PathBuf) -> error::Result<()> {
-	log::info!("Expanding to output: {:?}", out);
-
 	Ok(())
 }
