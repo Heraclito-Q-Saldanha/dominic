@@ -1,6 +1,6 @@
 use crate::*;
 
-pub fn split_code(input: &str) -> error::Result<(String, String)> {
+fn split_code(input: &str) -> error::Result<(String, String)> {
 	let mut code = String::new();
 
 	let mut html = lol_html::rewrite_str(
@@ -22,4 +22,21 @@ pub fn split_code(input: &str) -> error::Result<(String, String)> {
 	html.drain(..html.len() - html.trim_start().len());
 
 	Ok((code, html))
+}
+
+pub fn transpile(input: &str) -> error::Result<(String, String)> {
+	let (code, html) = split_code(input)?;
+
+	let code = transpile_code(&code)?;
+	let html = transpile_html(&html)?;
+
+	Ok((code, html))
+}
+
+fn transpile_code(code: &str) -> error::Result<String> {
+	Ok(code.to_string())
+}
+
+fn transpile_html(html: &str) -> error::Result<String> {
+	Ok(html.to_string())
 }

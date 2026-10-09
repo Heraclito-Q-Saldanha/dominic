@@ -126,7 +126,7 @@ fn build_project() -> error::Result<()> {
 }
 
 fn expand_project(out: &path::PathBuf) -> error::Result<()> {
-	let fuu = transpiler::split_code(
+	let fuu = transpiler::transpile(
 		r#"
 		<script>
 			let mut counter = 0;
@@ -135,7 +135,7 @@ fn expand_project(out: &path::PathBuf) -> error::Result<()> {
 	"#,
 	)?;
 
-	dbg!(fuu);
+	println!("{:?}", fuu);
 
 	Ok(())
 }
