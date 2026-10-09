@@ -1,6 +1,5 @@
 mod error;
 
-use clap::Args;
 use clap::Parser;
 use clap::Subcommand;
 
@@ -10,18 +9,12 @@ use std::path;
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
 enum Cargo {
+	#[command(subcommand)]
 	Dominic(Dominic),
 }
 
-#[derive(Args)]
-#[command(version, about)]
-struct Dominic {
-	#[command(subcommand)]
-	command: Command,
-}
-
 #[derive(Subcommand)]
-enum Command {
+enum Dominic {
 	New {
 		name: String,
 	},
@@ -37,22 +30,53 @@ enum Command {
 	},
 }
 
+const DEFAULT_INDEX: &'static str = r#"<script>
+	let mut counter = 0;
+
+	pub fn add(){
+		counter += 1;
+	}
+</script>
+<h1>Welcome to my project</h1>
+<button onclick="add">Add</button>
+<p>{counter}</p>
+"#;
+
 fn main() -> error::Result<()> {
-	let Cargo::Dominic(Dominic { command }) = Cargo::parse();
+	simple_logger::init().unwrap();
+
+	let Cargo::Dominic(command) = Cargo::parse();
 
 	match command {
-		Command::New { name } => create_project(&name),
-		Command::Init => init_project(),
-		Command::Run { port } => run_project(port),
-		Command::Build => build_project(),
-		Command::Expand { out } => expand_project(&out),
+		Dominic::New { name } => create_project(&name),
+		Dominic::Init => init_project(),
+		Dominic::Run { port } => run_project(port),
+		Dominic::Build => build_project(),
+		Dominic::Expand { out } => expand_project(&out),
 	}
 }
 
 fn create_project(name: &str) -> error::Result<()> {
 	log::info!("Creating project: {}", name);
 
-	fs::create_dir_all(name)?;
+	let path = path::PathBuf::from(name);
+
+	fs::create_dir_all(&path)?;
+	fs::create_dir_all(&path.join("src"))?;
+	fs::create_dir_all(&path.join("src").join("routes"))?;
+
+	let mut manifest = toml_edit::DocumentMut::new();
+
+	manifest["package"] = toml_edit::Item::Table(toml_edit::Table::new());
+
+	manifest["package"]["name"] = toml_edit::value(name);
+	manifest["package"]["version"] = toml_edit::value("0.1.0");
+	manifest["package"]["edition"] = toml_edit::value("2024");
+
+	manifest["dependencies"] = toml_edit::Item::Table(toml_edit::Table::default());
+
+	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
+	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_INDEX)?;
 
 	Ok(())
 }
