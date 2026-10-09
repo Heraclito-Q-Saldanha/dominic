@@ -1,4 +1,5 @@
 mod error;
+mod transpiler;
 
 use clap::Parser;
 use clap::Subcommand;
@@ -125,5 +126,16 @@ fn build_project() -> error::Result<()> {
 }
 
 fn expand_project(out: &path::PathBuf) -> error::Result<()> {
+	let fuu = transpiler::split_code(
+		r#"
+		<script>
+			let mut counter = 0;
+		</script>
+		<p>jujuba</p>
+	"#,
+	)?;
+
+	dbg!(fuu);
+
 	Ok(())
 }

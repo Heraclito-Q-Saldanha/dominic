@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 log = "0.4.34"
+lol_html = "3.0.1"
 simple_logger = "5.2.0"
 clap = { version = "4.6.7", features = ["derive"] }
 toml_edit = "0.25.17+spec-1.1.0"
