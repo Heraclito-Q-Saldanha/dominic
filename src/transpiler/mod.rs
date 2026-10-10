@@ -49,18 +49,15 @@ fn transpile_html(mut html: String, init_fn: &syn::Ident) -> error::Result<Strin
 	let script = format!(
 		r#"
 <script>
-(() => {{
-	const init = async () => {{
+	const start = async () => {{
 		const {{ instance }} = await WebAssembly.instantiateStreaming(fetch("/app.wasm"));
 		instance.exports.{init_fn}();
 	}};
-	const start = () => init().catch(console.error);
 	if (document.readyState === "complete") {{
 		start();
 	}} else {{
 		window.addEventListener("load", start, {{ once: true }});
 	}}
-}})();
 </script>
 "#
 	);

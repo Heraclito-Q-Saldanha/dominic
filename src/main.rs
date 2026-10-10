@@ -129,14 +129,14 @@ fn build_project() -> error::Result<()> {
 fn expand_project(out: &path::PathBuf) -> error::Result<()> {
 	let fuu = transpiler::transpile(
 		r#"
-		<script>
-			let mut counter = 0;
-		</script>
-		<p>jujuba</p>
-	"#,
+<script>
+	let mut counter = 0;
+</script>
+<p>jujuba</p>
+"#,
 	)?;
 
-	println!("{}", fuu.1);
+	println!("{}\n{}", fuu.0, fuu.1);
 
 	Ok(())
 }
