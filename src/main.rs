@@ -6,6 +6,7 @@ use clap::Subcommand;
 
 use std::env;
 use std::fs;
+use std::io;
 use std::path;
 
 #[derive(Parser)]
@@ -139,17 +140,24 @@ fn expand_project(output: &path::PathBuf) -> error::Result<()> {
 	for path in walkdir::WalkDir::new(&routes) {
 		let path = path?.path().to_path_buf();
 
-		if path.is_dir() {
+		let Some(name) = path.file_name() else {
+			continue;
+		};
+
+		let Some(parent) = path.parent() else {
+			continue;
+		};
+
+		let code = if path.is_dir() {
 			fs::create_dir_all(output.join(&path))?;
+			fs::File::create(output.join(&path).join("mod.rs"))?;
+
+			if parent == src {
+				continue;
+			}
+
+			format!("mod {};", name.to_string_lossy())
 		} else {
-			let Some(name) = path.file_name() else {
-				continue;
-			};
-
-			let Some(parent) = path.parent() else {
-				continue;
-			};
-
 			if name != "+page.minic" {
 				continue;
 			}
@@ -159,8 +167,14 @@ fn expand_project(output: &path::PathBuf) -> error::Result<()> {
 			let (code, html) = transpiler::transpile(&input)?;
 
 			fs::write(output.join(&parent).join("index.html"), html)?;
-			fs::write(output.join(&parent).join("mod.rs"), code)?;
-		}
+
+			code
+		};
+
+		let mut module = fs::OpenOptions::new().append(true).open(output.join(parent).join("mod.rs"))?;
+
+		io::Write::write_all(&mut module, code.as_bytes())?;
+		io::Write::write_all(&mut module, b"\n")?;
 	}
 
 	Ok(())
