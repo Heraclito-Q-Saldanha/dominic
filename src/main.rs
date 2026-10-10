@@ -127,9 +127,15 @@ fn build_project() -> error::Result<()> {
 }
 
 fn expand_project(output: &path::PathBuf) -> error::Result<()> {
-	let routes = path::PathBuf::from("src").join("routes");
+	let src = path::PathBuf::from("src");
+	let routes = src.join("routes");
 
-	for path in walkdir::WalkDir::new(routes) {
+	fs::create_dir_all(output.join(&routes))?;
+
+	fs::copy("Cargo.toml", output.join("Cargo.toml"))?;
+	fs::write(output.join(src.join("lib.rs")), "mod routes;")?;
+
+	for path in walkdir::WalkDir::new(&routes) {
 		let path = path?.path().to_path_buf();
 
 		if path.is_dir() {
@@ -155,8 +161,6 @@ fn expand_project(output: &path::PathBuf) -> error::Result<()> {
 			fs::write(output.join(&parent).join("mod.rs"), code)?;
 		}
 	}
-
-	fs::copy("Cargo.toml", output.join("Cargo.toml"))?;
 
 	Ok(())
 }
