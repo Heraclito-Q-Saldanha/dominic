@@ -26,7 +26,10 @@ enum Dominic {
 		#[arg(short, long, default_value_t = 8080)]
 		port: u16,
 	},
-	Build,
+	Build {
+		#[arg(short, long, default_value = "dist")]
+		out: path::PathBuf,
+	},
 	Expand {
 		#[arg(short, long, default_value = "target/expand")]
 		out: path::PathBuf,
@@ -70,10 +73,10 @@ fn main() -> error::Result<()> {
 
 			run_project(port)
 		}
-		Dominic::Build => {
-			log::info!("Building project");
+		Dominic::Build { out } => {
+			log::info!("Building project to output: {:?}", out);
 
-			build_project()
+			build_project(&out)
 		}
 		Dominic::Expand { out } => {
 			log::info!("Expanding to output: {:?}", out);
@@ -124,7 +127,7 @@ fn run_project(port: u16) -> error::Result<()> {
 	Ok(())
 }
 
-fn build_project() -> error::Result<()> {
+fn build_project(output: &path::PathBuf) -> error::Result<()> {
 	Ok(())
 }
 
