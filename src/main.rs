@@ -9,6 +9,9 @@ use std::fs;
 use std::io;
 use std::path;
 
+const DEFAULT_EXPAND_PATH: &'static str = "target/expand";
+const DEFAULT_BUILD_PATH: &'static str = "dist";
+
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
 enum Cargo {
@@ -27,11 +30,11 @@ enum Dominic {
 		port: u16,
 	},
 	Build {
-		#[arg(short, long, default_value = "dist")]
+		#[arg(short, long, default_value = DEFAULT_BUILD_PATH)]
 		out: path::PathBuf,
 	},
 	Expand {
-		#[arg(short, long, default_value = "target/expand")]
+		#[arg(short, long, default_value = DEFAULT_EXPAND_PATH)]
 		out: path::PathBuf,
 	},
 }
@@ -127,11 +130,17 @@ fn run_project(port: u16) -> error::Result<()> {
 	Ok(())
 }
 
-fn build_project(output: &path::PathBuf) -> error::Result<()> {
+fn build_project(output: &path::Path) -> error::Result<()> {
+	fs::create_dir_all(&output)?;
+
+	let expand_path = path::PathBuf::from(DEFAULT_EXPAND_PATH);
+
+	expand_project(&expand_path)?;
+
 	Ok(())
 }
 
-fn expand_project(output: &path::PathBuf) -> error::Result<()> {
+fn expand_project(output: &path::Path) -> error::Result<()> {
 	let src = path::PathBuf::from("src");
 	let routes = src.join("routes");
 
