@@ -32,7 +32,8 @@ enum Dominic {
 	},
 }
 
-const DEFAULT_INDEX: &'static str = r#"<script>
+const DEFAULT_PAGE: &'static str = r#"
+<script>
 	let mut counter = 0;
 
 	pub fn add(){
@@ -112,7 +113,7 @@ fn init_project(path: &path::Path) -> error::Result<()> {
 	manifest["dependencies"] = toml_edit::Item::Table(toml_edit::Table::default());
 
 	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
-	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_INDEX)?;
+	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_PAGE)?;
 
 	Ok(())
 }
@@ -135,7 +136,7 @@ fn expand_project(out: &path::PathBuf) -> error::Result<()> {
 	"#,
 	)?;
 
-	println!("{:?}", fuu);
+	println!("{}", fuu.1);
 
 	Ok(())
 }

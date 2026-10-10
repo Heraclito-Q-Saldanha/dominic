@@ -69,8 +69,10 @@ name = "cargo-dominic"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fastrand",
  "log",
  "lol_html",
+ "quote",
  "simple_logger",
  "syn 3.0.6",
  "toml_edit",
