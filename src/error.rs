@@ -4,14 +4,24 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
 	Io(std::io::Error),
 	Html(lol_html::errors::RewritingError),
-	Rust(syn::Error),
+	Syn(syn::Error),
 	WalkDir(walkdir::Error),
+	Toml(toml_edit::TomlError),
+	Cargo,
 	InvalidFilePath,
+	InvalidManifest,
+}
+
+impl From<toml_edit::TomlError> for Error {
+	fn from(value: toml_edit::TomlError) -> Self {
+		Self::Toml(value)
+	}
 }
 
 impl From<syn::Error> for Error {
+	#[inline(always)]
 	fn from(value: syn::Error) -> Self {
-		Self::Rust(value)
+		Self::Syn(value)
 	}
 }
 

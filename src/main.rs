@@ -8,6 +8,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path;
+use std::process;
 
 const DEFAULT_EXPAND_PATH: &'static str = "target/expand";
 const DEFAULT_BUILD_PATH: &'static str = "dist";
@@ -131,25 +132,65 @@ fn run_project(port: u16) -> error::Result<()> {
 }
 
 fn build_project(output: &path::Path) -> error::Result<()> {
-	fs::create_dir_all(&output)?;
-
 	let expand_path = path::PathBuf::from(DEFAULT_EXPAND_PATH);
 
 	expand_project(&expand_path)?;
+
+	let manifest_path = expand_path.join("Cargo.toml");
+
+	let mut manifest = fs::read_to_string(&manifest_path)?.parse::<toml_edit::DocumentMut>()?;
+	let name = manifest["package"]["name"].as_str().ok_or(error::Error::InvalidManifest)?.replace('-', "_");
+
+	if !manifest.contains_key("workspace") {
+		manifest["workspace"] = toml_edit::Item::Table(toml_edit::Table::new());
+	}
+
+	fs::write(&manifest_path, manifest.to_string())?;
+
+	let status = process::Command::new("cargo")
+		.current_dir(&expand_path)
+		.args(["rustc", "--release", "--lib", "--crate-type", "cdylib", "--target", "wasm32-unknown-unknown", "--target-dir", "target"])
+		.status()?;
+
+	if !status.success() {
+		return Err(error::Error::Cargo);
+	}
+
+	let release_dir = expand_path.join("target").join("wasm32-unknown-unknown").join("release").join(format!("{name}.wasm"));
+	let routes_path = expand_path.join("src").join("routes");
+
+	fs::create_dir_all(output)?;
+	fs::copy(&release_dir, output.join("index.wasm"))?;
+
+	for path in walkdir::WalkDir::new(&routes_path) {
+		let path = path?.path().to_path_buf();
+		let name = path.file_name().ok_or(error::Error::InvalidFilePath)?.to_string_lossy();
+
+		if !path.is_file() || name != "index.html" {
+			continue;
+		}
+
+		let relative = path.strip_prefix(&routes_path).map_err(|_| error::Error::InvalidFilePath)?;
+		let destination = output.join(relative);
+		let parent = destination.parent().ok_or(error::Error::InvalidFilePath)?;
+
+		fs::create_dir_all(parent)?;
+		fs::copy(path, destination)?;
+	}
 
 	Ok(())
 }
 
 fn expand_project(output: &path::Path) -> error::Result<()> {
-	let src = path::PathBuf::from("src");
-	let routes = src.join("routes");
+	let src_path = path::PathBuf::from("src");
+	let routes_path = src_path.join("routes");
 
-	fs::create_dir_all(output.join(&routes))?;
+	fs::create_dir_all(output.join(&routes_path))?;
 
 	fs::copy("Cargo.toml", output.join("Cargo.toml"))?;
-	fs::write(output.join(src.join("lib.rs")), "mod routes;")?;
+	fs::write(output.join(src_path.join("lib.rs")), "mod routes;")?;
 
-	for path in walkdir::WalkDir::new(&routes) {
+	for path in walkdir::WalkDir::new(&routes_path) {
 		let path = path?.path().to_path_buf();
 
 		let Some(name) = path.file_name() else {
@@ -164,7 +205,7 @@ fn expand_project(output: &path::Path) -> error::Result<()> {
 			fs::create_dir_all(output.join(&path))?;
 			fs::File::create(output.join(&path).join("mod.rs"))?;
 
-			if parent == src {
+			if parent == src_path {
 				continue;
 			}
 
