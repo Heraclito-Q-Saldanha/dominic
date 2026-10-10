@@ -50,7 +50,7 @@ fn transpile_html(mut html: String, init_fn: &syn::Ident) -> error::Result<Strin
 		r#"
 <script>
 	const start = async () => {{
-		const {{ instance }} = await WebAssembly.instantiateStreaming(fetch("/app.wasm"));
+		const {{ instance }} = await WebAssembly.instantiateStreaming(fetch("/index.wasm"));
 		instance.exports.{init_fn}();
 	}};
 	if (document.readyState === "complete") {{

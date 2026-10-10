@@ -27,7 +27,7 @@ enum Dominic {
 	},
 	Build,
 	Expand {
-		#[arg(short, long, default_value = "target/wk-expand")]
+		#[arg(short, long, default_value = "target/expand")]
 		out: path::PathBuf,
 	},
 }
