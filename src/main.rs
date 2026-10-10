@@ -126,17 +126,35 @@ fn build_project() -> error::Result<()> {
 	Ok(())
 }
 
-fn expand_project(out: &path::PathBuf) -> error::Result<()> {
-	let fuu = transpiler::transpile(
-		r#"
-<script>
-	let mut counter = 0;
-</script>
-<p>jujuba</p>
-"#,
-	)?;
+fn expand_project(output: &path::PathBuf) -> error::Result<()> {
+	let input = path::PathBuf::from("src").join("routes");
 
-	println!("{}\n{}", fuu.0, fuu.1);
+	for path in walkdir::WalkDir::new(&input) {
+		let path = path?.path().to_path_buf();
+
+		if path.is_dir() {
+			fs::create_dir_all(output.join(&path))?;
+		} else {
+			let Some(name) = path.file_name() else {
+				continue;
+			};
+
+			let Some(parent) = path.parent() else {
+				continue;
+			};
+
+			if name != "+page.minic" {
+				continue;
+			}
+
+			let input = fs::read_to_string(&path)?;
+
+			let (code, html) = transpiler::transpile(&input)?;
+
+			fs::write(output.join(&parent).join("index.html"), html)?;
+			fs::write(output.join(&parent).join("mod.rs"), code)?;
+		}
+	}
 
 	Ok(())
 }

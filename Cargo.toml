@@ -12,3 +12,4 @@ toml_edit = "0.25.17+spec-1.1.0"
 syn = { version = "3.0.6", features = ["full"] }
 quote = "1.0.47"
 fastrand = "2.5.0"
+walkdir = "2.5.0"

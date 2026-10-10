@@ -5,6 +5,7 @@ pub enum Error {
 	Io(std::io::Error),
 	Html(lol_html::errors::RewritingError),
 	Rust(syn::Error),
+	WalkDir(walkdir::Error),
 	InvalidFilePath,
 }
 
@@ -25,5 +26,12 @@ impl From<std::io::Error> for Error {
 	#[inline(always)]
 	fn from(value: std::io::Error) -> Self {
 		Self::Io(value)
+	}
+}
+
+impl From<walkdir::Error> for Error {
+	#[inline(always)]
+	fn from(value: walkdir::Error) -> Self {
+		Self::WalkDir(value)
 	}
 }
