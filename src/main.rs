@@ -32,8 +32,7 @@ enum Dominic {
 	},
 }
 
-const DEFAULT_PAGE: &'static str = r#"
-<script>
+const DEFAULT_PAGE: &'static str = r#"<script>
 	let mut counter = 0;
 
 	pub fn add(){
@@ -114,6 +113,8 @@ fn init_project(path: &path::Path) -> error::Result<()> {
 
 	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
 	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_PAGE)?;
+
+	fs::write(&path.join(".gitignore"), "/target")?;
 
 	Ok(())
 }
