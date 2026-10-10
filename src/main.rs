@@ -105,8 +105,6 @@ fn init_project(path: &path::Path) -> error::Result<()> {
 
 	let name = name.to_string_lossy().to_string();
 
-	fs::create_dir_all(&path)?;
-	fs::create_dir_all(&path.join("src"))?;
 	fs::create_dir_all(&path.join("src").join("routes"))?;
 
 	let mut manifest = toml_edit::DocumentMut::new();
@@ -121,7 +119,6 @@ fn init_project(path: &path::Path) -> error::Result<()> {
 
 	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
 	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_PAGE)?;
-
 	fs::write(&path.join(".gitignore"), "/target")?;
 
 	Ok(())
