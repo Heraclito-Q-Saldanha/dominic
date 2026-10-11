@@ -1,5 +1,7 @@
 use crate::*;
 
+use std::collections;
+
 fn split_code(input: &str) -> error::Result<(String, String)> {
 	let mut code = String::new();
 
@@ -26,34 +28,72 @@ fn split_code(input: &str) -> error::Result<(String, String)> {
 
 pub fn transpile(input: &str) -> error::Result<(String, String)> {
 	let (code, html) = split_code(input)?;
+
+	let mut references = collections::BTreeMap::new();
+
+	let mut html = lol_html::rewrite_str(
+		&html,
+		lol_html::RewriteStrSettings::new().append_element_content_handler(lol_html::element!("*", |element| {
+			let mut attributes = Vec::new();
+
+			for attribute in element.attributes() {
+				let value = attribute.value();
+				let Some(value) = value.trim().strip_prefix('{') else {
+					continue;
+				};
+				let Some(value) = value.strip_suffix('}') else {
+					continue;
+				};
+				let rs_name = value.trim();
+				let js_name = format!("_{}_{}", rs_name, fastrand::u128(..));
+
+				references.insert(rs_name.to_string(), js_name.clone());
+				attributes.push((attribute.name(), format!("window.__dominic?.{js_name}()")));
+			}
+
+			for (name, value) in attributes {
+				element.set_attribute(&name, &value)?;
+			}
+
+			Ok(())
+		})),
+	)?;
+
+	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
+
+	for statement in &mut body.stmts {
+		let syn::Stmt::Item(syn::Item::Fn(function)) = statement else {
+			continue;
+		};
+		let rs_name = function.sig.ident.to_string();
+
+		let Some(js_name) = references.get(&rs_name) else {
+			continue;
+		};
+
+		function.attrs.push(syn::parse_quote! {
+			#[dominic_runtime::bindgen(js_name = #js_name, wasm_bindgen = dominic_runtime::wasm_bindgen)]
+		});
+		function.vis = syn::parse_quote!(pub);
+	}
+
 	let init_fn = quote::format_ident!("__init_{:032x}", fastrand::u128(..));
 
-	let code = transpile_code(&code, &init_fn)?;
-	let html = transpile_html(html, &init_fn)?;
-
-	Ok((code, html))
-}
-
-fn transpile_code(code: &str, init_fn: &syn::Ident) -> error::Result<String> {
-	let body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 	let code = quote::quote! {
 		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen)]
 		pub fn #init_fn() #body
 	}
 	.to_string();
 
-	Ok(code)
-}
-
-fn transpile_html(mut html: String, init_fn: &syn::Ident) -> error::Result<String> {
 	let script = format!(
 		r#"
 <script type="module">
-	import init, {{ {init_fn} }} from "/index.js";
+	import * as script from "/index.js";
 
 	const start = async () => {{
-		await init({{ module_or_path: "/index_bg.wasm" }});
-		{init_fn}();
+		await script.default({{ module_or_path: "/index_bg.wasm" }});
+		window.__dominic = script;
+		window.__dominic.{init_fn}();
 	}};
 	if (document.readyState === "complete") {{
 		start();
@@ -66,5 +106,5 @@ fn transpile_html(mut html: String, init_fn: &syn::Ident) -> error::Result<Strin
 
 	html.push_str(&script);
 
-	Ok(html)
+	Ok((code, html))
 }
