@@ -8,7 +8,7 @@ use clap::Subcommand;
 use std::env;
 use std::path;
 
-pub const DEFAULT_EXPAND_PATH: &'static str = "target/expand";
+pub const DEFAULT_EXPAND_PATH: &'static str = "target";
 pub const DEFAULT_BUILD_PATH: &'static str = "dist";
 
 #[derive(Parser)]
@@ -24,6 +24,7 @@ enum Dominic {
 		name: String,
 	},
 	Init,
+	Clean,
 	Run {
 		#[arg(short, long, default_value_t = 8080)]
 		port: u16,
@@ -59,6 +60,11 @@ fn main() -> error::Result<()> {
 			};
 
 			project::init_project(&path)
+		}
+		Dominic::Clean => {
+			log::info!("Cleaning project");
+
+			project::clean_project()
 		}
 		Dominic::Run { port, address } => {
 			log::info!("Running on http://{}:{}", address, port);
