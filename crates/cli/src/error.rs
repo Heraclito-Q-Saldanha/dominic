@@ -8,6 +8,7 @@ pub enum Error {
 	WalkDir(walkdir::Error),
 	Toml(toml_edit::TomlError),
 	Notify(notify::Error),
+	Anyhow(anyhow::Error),
 	Cargo,
 	InvalidFilePath,
 	InvalidManifest,
@@ -50,5 +51,12 @@ impl From<walkdir::Error> for Error {
 	#[inline(always)]
 	fn from(value: walkdir::Error) -> Self {
 		Self::WalkDir(value)
+	}
+}
+
+impl From<anyhow::Error> for Error {
+	#[inline(always)]
+	fn from(value: anyhow::Error) -> Self {
+		Self::Anyhow(value)
 	}
 }

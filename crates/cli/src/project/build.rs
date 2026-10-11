@@ -33,7 +33,8 @@ pub fn build_project(output: &path::Path) -> error::Result<()> {
 	let routes_path = expand_path.join("src").join("routes");
 
 	fs::create_dir_all(output)?;
-	fs::copy(&release_dir, output.join("index.wasm"))?;
+
+	wasm_bindgen_cli_support::Bindgen::new().input_path(&release_dir).out_name("index").web(true)?.generate(output)?;
 
 	for path in walkdir::WalkDir::new(&routes_path) {
 		let path = path?.path().to_path_buf();

@@ -37,8 +37,8 @@ pub fn transpile(input: &str) -> error::Result<(String, String)> {
 fn transpile_code(code: &str, init_fn: &syn::Ident) -> error::Result<String> {
 	let body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 	let code = quote::quote! {
-		#[unsafe(no_mangle)]
-		pub extern "C" fn #init_fn() #body
+		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen)]
+		pub fn #init_fn() #body
 	}
 	.to_string();
 
@@ -48,10 +48,12 @@ fn transpile_code(code: &str, init_fn: &syn::Ident) -> error::Result<String> {
 fn transpile_html(mut html: String, init_fn: &syn::Ident) -> error::Result<String> {
 	let script = format!(
 		r#"
-<script>
+<script type="module">
+	import init, {{ {init_fn} }} from "/index.js";
+
 	const start = async () => {{
-		const {{ instance }} = await WebAssembly.instantiateStreaming(fetch("/index.wasm"));
-		instance.exports.{init_fn}();
+		await init({{ module_or_path: "/index_bg.wasm" }});
+		{init_fn}();
 	}};
 	if (document.readyState === "complete") {{
 		start();
