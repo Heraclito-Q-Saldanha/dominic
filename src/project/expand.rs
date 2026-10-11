@@ -5,7 +5,7 @@ use std::io;
 use std::path;
 
 pub fn expand_project(output: &path::Path) -> error::Result<()> {
-	let src_path = path::PathBuf::from("src");
+	let src_path = path::Path::new("src");
 	let routes_path = src_path.join("routes");
 
 	fs::create_dir_all(output.join(&routes_path))?;

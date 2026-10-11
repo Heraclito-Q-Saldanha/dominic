@@ -5,7 +5,7 @@ use std::path;
 use std::process;
 
 pub fn build_project(output: &path::Path) -> error::Result<()> {
-	let expand_path = path::PathBuf::from(DEFAULT_EXPAND_PATH);
+	let expand_path = path::Path::new(DEFAULT_EXPAND_PATH);
 
 	project::expand_project(&expand_path)?;
 

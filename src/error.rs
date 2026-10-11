@@ -7,9 +7,16 @@ pub enum Error {
 	Syn(syn::Error),
 	WalkDir(walkdir::Error),
 	Toml(toml_edit::TomlError),
+	Notify(notify::Error),
 	Cargo,
 	InvalidFilePath,
 	InvalidManifest,
+}
+
+impl From<notify::Error> for Error {
+	fn from(value: notify::Error) -> Self {
+		Self::Notify(value)
+	}
 }
 
 impl From<toml_edit::TomlError> for Error {

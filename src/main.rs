@@ -39,7 +39,7 @@ enum Dominic {
 }
 
 fn main() -> error::Result<()> {
-	simple_logger::init().unwrap();
+	simple_logger::init_with_level(log::Level::Info).unwrap();
 
 	let Cargo::Dominic(command) = Cargo::parse();
 
@@ -59,7 +59,7 @@ fn main() -> error::Result<()> {
 			project::init_project(&path)
 		}
 		Dominic::Run { port } => {
-			log::info!("Running on port: {}", port);
+			log::info!("Running on http://127.0.0.1:{}", port);
 
 			project::run_project(port)
 		}
