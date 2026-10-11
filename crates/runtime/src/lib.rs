@@ -6,6 +6,7 @@ use std::sync;
 
 static ID_COUNTER: sync::atomic::AtomicUsize = sync::atomic::AtomicUsize::new(0);
 
+#[derive(Debug, Clone)]
 pub struct State<T> {
 	id: usize,
 	value: sync::Arc<sync::RwLock<T>>,
