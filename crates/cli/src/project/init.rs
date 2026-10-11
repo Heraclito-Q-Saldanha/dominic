@@ -11,7 +11,7 @@ const DEFAULT_PAGE: &'static str = r#"<script>
 	}
 </script>
 <h1>Welcome to my project</h1>
-<button onclick="add">Add</button>
+<button onclick={add}>Add</button>
 <p>{counter}</p>
 "#;
 
@@ -33,6 +33,7 @@ pub fn init_project(path: &path::Path) -> error::Result<()> {
 	manifest["package"]["edition"] = toml_edit::value("2024");
 
 	manifest["dependencies"] = toml_edit::Item::Table(toml_edit::Table::default());
+	manifest["dependencies"]["dominic-runtime"] = toml_edit::value("0.1.0");
 
 	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
 	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_PAGE)?;
