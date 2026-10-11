@@ -27,6 +27,8 @@ enum Dominic {
 	Run {
 		#[arg(short, long, default_value_t = 8080)]
 		port: u16,
+		#[arg(short, long, default_value = "127.0.0.1")]
+		address: String,
 	},
 	Build {
 		#[arg(short, long, default_value = DEFAULT_BUILD_PATH)]
@@ -58,10 +60,10 @@ fn main() -> error::Result<()> {
 
 			project::init_project(&path)
 		}
-		Dominic::Run { port } => {
-			log::info!("Running on http://127.0.0.1:{}", port);
+		Dominic::Run { port, address } => {
+			log::info!("Running on http://{}:{}", address, port);
 
-			project::run_project(port)
+			project::run_project(&address, port)
 		}
 		Dominic::Build { out } => {
 			log::info!("Building project to output: {:?}", out);

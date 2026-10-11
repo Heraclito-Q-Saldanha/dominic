@@ -6,21 +6,21 @@ use notify::Watcher;
 use tower_http::services;
 use tower_http::set_header;
 
-pub fn run_project(port: u16) -> error::Result<()> {
+pub fn run_project(address: &str, port: u16) -> error::Result<()> {
 	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
 
 	runtime.block_on(async {
 		let _watcher = watch_project()?;
-		serve_project(port).await
+		serve_project(address, port).await
 	})
 }
 
-async fn serve_project(port: u16) -> error::Result<()> {
+async fn serve_project(address: &str, port: u16) -> error::Result<()> {
 	let app = axum::Router::new()
 		.fallback_service(services::ServeDir::new(DEFAULT_BUILD_PATH))
 		.layer(set_header::SetResponseHeaderLayer::overriding(http::header::CACHE_CONTROL, http::HeaderValue::from_static("no-store")));
 
-	let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+	let listener = tokio::net::TcpListener::bind((address, port)).await?;
 
 	axum::serve(listener, app).await?;
 
