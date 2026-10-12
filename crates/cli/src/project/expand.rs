@@ -54,8 +54,8 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 
 			const start = async () => {{
 				await script.default({{ module_or_path: "/index_bg.wasm" }});
-				window.__dominic = script;
-				window.__dominic.{}();
+				window._dominic_ = script;
+				window._dominic_.{}();
 			}};
 			if (document.readyState === "complete") {{
 				start();

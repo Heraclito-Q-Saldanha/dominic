@@ -27,7 +27,7 @@ pub fn transpile_html(input: &str) -> error::Result<HTMLTranspilerOutput> {
 				let js_name = format!("_{}_{}", rs_name, fastrand::u128(..));
 
 				references.insert(rs_name.to_string(), js_name.clone());
-				attributes.push((attribute.name(), format!("window.__dominic?.{js_name}()")));
+				attributes.push((attribute.name(), format!("window._dominic_?.{js_name}()")));
 			}
 
 			for (name, value) in attributes {
