@@ -7,7 +7,7 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
-pub fn transpile_states(body: &mut syn::Block) -> error::Result<()> {
+pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<()> {
 	for statement in mem::take(&mut body.stmts) {
 		let syn::Stmt::Local(mut local) = statement else {
 			body.stmts.push(statement);
@@ -109,7 +109,7 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
 	transpile_functions(html, &mut body)?;
-	transpile_states(&mut body)?;
+	transpile_state_declarations(&mut body)?;
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 
