@@ -40,11 +40,39 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 
 			let input = fs::read_to_string(&path)?;
 
-			let (code, html) = transpiler::transpile(&input)?;
+			let (html, code) = transpiler::transpile(&input)?;
 
-			fs::write(output.join(&parent).join("index.html"), html)?;
+			let content = format!(
+				r#"<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+	</head>
+	<body>
+		<script type="module">
+			import * as script from "/index.js";
 
-			code
+			const start = async () => {{
+				await script.default({{ module_or_path: "/index_bg.wasm" }});
+				window.__dominic = script;
+				window.__dominic.{}();
+			}};
+			if (document.readyState === "complete") {{
+				start();
+			}} else {{
+				window.addEventListener("load", start, {{ once: true }});
+			}}
+		</script>
+		{}
+	</body>
+</html>
+"#,
+				code.init_fn, html.html
+			);
+
+			fs::write(output.join(&parent).join("index.html"), content)?;
+
+			code.code
 		};
 
 		let mut module = fs::OpenOptions::new().append(true).open(output.join(parent).join("mod.rs"))?;
