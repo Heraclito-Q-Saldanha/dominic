@@ -7,103 +7,109 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
-pub fn transpile_state(mut local: syn::Local) -> error::Result<syn::Local> {
-	let Some(init) = &mut local.init else {
-		return Ok(local);
-	};
-	let syn::Expr::Macro(invocation) = init.expr.as_ref() else {
-		return Ok(local);
-	};
-	if !invocation.mac.path.is_ident("state") {
-		return Ok(local);
-	}
-
-	let value = invocation.mac.parse_body::<syn::Expr>()?;
-	let attributes = &invocation.attrs;
-
-	init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
-
-	Ok(local)
-}
-
-pub fn transpile_fn(html: &transpiler::html::HTMLTranspilerOutput, mut function: syn::ItemFn) -> error::Result<syn::Block> {
-	let mut types = Vec::new();
-	let mut arguments = Vec::new();
-
-	for parameter in &function.sig.inputs {
-		let syn::FnArg::Typed(parameter) = parameter else {
-			return Err(syn::Error::new_spanned(&parameter, "Functions need to have typed parameters.").into());
-		};
-		let syn::Pat::Ident(argument) = parameter.pat.as_ref() else {
-			return Err(syn::Error::new_spanned(&parameter.pat, "Function parameters need to be named bindings.").into());
+pub fn transpile_states(body: &mut syn::Block) -> error::Result<()> {
+	for statement in mem::take(&mut body.stmts) {
+		let syn::Stmt::Local(mut local) = statement else {
+			body.stmts.push(statement);
+			continue;
 		};
 
-		types.push(&parameter.ty);
-		arguments.push(&argument.ident);
-	}
-
-	let rs_name = function.sig.ident.to_string();
-
-	if let Some(js_name) = html.references.get(&rs_name) {
-		function.attrs.push(syn::parse_quote! {
-			#[dominic_runtime::bindgen(js_name = #js_name, wasm_bindgen = dominic_runtime::wasm_bindgen)]
-		});
-		function.vis = syn::parse_quote!(pub);
-	}
-
-	let function_block = &function.block;
-	let closure_body = match function.sig.safety {
-		syn::Safety::Unsafe(_) => quote::quote!({ unsafe #function_block }),
-		_ => quote::quote!(#function_block),
-	};
-
-	let uninitialized_error = format!("function `{rs_name}` called before initialization");
-	let storage = quote::format_ident!("__{}_closure_{}", &rs_name, fastrand::u128(..));
-
-	function.block = syn::parse_quote!({
-		#storage.with_borrow_mut(|closure| {
-			closure.as_mut().expect(#uninitialized_error)(#(#arguments),*)
-		})
-	});
-
-	let parameters = &function.sig.inputs;
-	let output = &function.sig.output;
-
-	let replacement: syn::Block = syn::parse_quote!({
-		::std::thread_local! {
-			#[allow(non_upper_case_globals)]
-			static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> =
-				const { ::std::cell::RefCell::new(::core::option::Option::None) };
+		let Some(init) = &mut local.init else {
+			body.stmts.push(syn::Stmt::Local(local));
+			continue;
+		};
+		let syn::Expr::Macro(invocation) = init.expr.as_ref() else {
+			body.stmts.push(syn::Stmt::Local(local));
+			continue;
+		};
+		if !invocation.mac.path.is_ident("state") {
+			body.stmts.push(syn::Stmt::Local(local));
+			continue;
 		}
 
-		#function
+		let value = invocation.mac.parse_body::<syn::Expr>()?;
+		let attributes = &invocation.attrs;
 
-		#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
-	});
+		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
 
-	Ok(replacement)
+		body.stmts.push(syn::Stmt::Local(local));
+	}
+
+	Ok(())
+}
+
+pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: &mut syn::Block) -> error::Result<()> {
+	for statement in mem::take(&mut body.stmts) {
+		let syn::Stmt::Item(syn::Item::Fn(mut function)) = statement else {
+			body.stmts.push(statement);
+			continue;
+		};
+
+		let mut types = Vec::new();
+		let mut arguments = Vec::new();
+
+		for parameter in &function.sig.inputs {
+			let syn::FnArg::Typed(parameter) = parameter else {
+				return Err(syn::Error::new_spanned(&parameter, "Functions need to have typed parameters.").into());
+			};
+			let syn::Pat::Ident(argument) = parameter.pat.as_ref() else {
+				return Err(syn::Error::new_spanned(&parameter.pat, "Function parameters need to be named bindings.").into());
+			};
+
+			types.push(&parameter.ty);
+			arguments.push(&argument.ident);
+		}
+
+		let rs_name = function.sig.ident.to_string();
+
+		if let Some(js_name) = html.references.get(&rs_name) {
+			function.attrs.push(syn::parse_quote! {
+				#[dominic_runtime::bindgen(js_name = #js_name, wasm_bindgen = dominic_runtime::wasm_bindgen)]
+			});
+			function.vis = syn::parse_quote!(pub);
+		}
+
+		let function_block = &function.block;
+		let closure_body = match function.sig.safety {
+			syn::Safety::Unsafe(_) => quote::quote!({ unsafe #function_block }),
+			_ => quote::quote!(#function_block),
+		};
+
+		let uninitialized_error = format!("function `{rs_name}` called before initialization");
+		let storage = quote::format_ident!("__{}_closure_{}", &rs_name, fastrand::u128(..));
+
+		function.block = syn::parse_quote!({
+			#storage.with_borrow_mut(|closure| {
+				closure.as_mut().expect(#uninitialized_error)(#(#arguments),*)
+			})
+		});
+
+		let parameters = &function.sig.inputs;
+		let output = &function.sig.output;
+
+		let replacement: syn::Block = syn::parse_quote!({
+			::std::thread_local! {
+				#[allow(non_upper_case_globals)]
+				static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> =
+					const { ::std::cell::RefCell::new(::core::option::Option::None) };
+			}
+
+			#function
+
+			#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
+		});
+
+		body.stmts.extend(replacement.stmts);
+	}
+
+	Ok(())
 }
 
 pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
-	for statement in mem::take(&mut body.stmts) {
-		match statement {
-			syn::Stmt::Local(local) => {
-				let replacement = transpile_state(local)?;
-
-				body.stmts.push(syn::Stmt::Local(replacement));
-			}
-			syn::Stmt::Item(syn::Item::Fn(function)) => {
-				let replacement = transpile_fn(html, function)?;
-
-				body.stmts.extend(replacement.stmts);
-			}
-			statement => {
-				body.stmts.push(statement);
-			}
-		}
-	}
+	transpile_functions(html, &mut body)?;
+	transpile_states(&mut body)?;
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 
