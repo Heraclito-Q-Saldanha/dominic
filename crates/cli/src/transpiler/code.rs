@@ -7,6 +7,25 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
+pub fn transpile_state(mut local: syn::Local) -> error::Result<syn::Local> {
+	let Some(init) = &mut local.init else {
+		return Ok(local);
+	};
+	let syn::Expr::Macro(invocation) = init.expr.as_ref() else {
+		return Ok(local);
+	};
+	if !invocation.mac.path.is_ident("state") {
+		return Ok(local);
+	}
+
+	let value = invocation.mac.parse_body::<syn::Expr>()?;
+	let attributes = &invocation.attrs;
+
+	init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
+
+	Ok(local)
+}
+
 pub fn transpile_fn(html: &transpiler::html::HTMLTranspilerOutput, mut function: syn::ItemFn) -> error::Result<syn::Block> {
 	let mut types = Vec::new();
 	let mut arguments = Vec::new();
@@ -70,6 +89,11 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 
 	for statement in mem::take(&mut body.stmts) {
 		match statement {
+			syn::Stmt::Local(local) => {
+				let replacement = transpile_state(local)?;
+
+				body.stmts.push(syn::Stmt::Local(replacement));
+			}
 			syn::Stmt::Item(syn::Item::Fn(function)) => {
 				let replacement = transpile_fn(html, function)?;
 
