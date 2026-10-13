@@ -1,8 +1,8 @@
 use logos::Logos;
 
 pub struct Code<'source> {
-	source: &'source str,
-	tokens: Vec<Token<'source>>,
+	pub source: &'source str,
+	pub tokens: Vec<Token<'source>>,
 }
 
 pub fn parse<'source>(source: &'source str) -> Result<Code<'source>, ()> {

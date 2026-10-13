@@ -1,5 +1,3 @@
-use crate::*;
-
 use std::collections;
 
 pub struct HTMLTranspilerOutput {
@@ -7,36 +5,23 @@ pub struct HTMLTranspilerOutput {
 	pub fn_references: collections::BTreeMap<String, String>,
 }
 
-pub fn transpile_html(input: &str) -> error::Result<HTMLTranspilerOutput> {
+pub fn transpile_html(input: &dominic_lexer::Code<'_>) -> HTMLTranspilerOutput {
 	let mut fn_references = collections::BTreeMap::new();
+	let mut html = String::with_capacity(input.source.len());
 
-	let html = lol_html::rewrite_str(
-		input,
-		lol_html::RewriteStrSettings::new().append_element_content_handler(lol_html::element!("*", |element| {
-			let mut attributes = Vec::new();
-
-			for attribute in element.attributes() {
-				let value = attribute.value();
-				let Some(value) = value.trim().strip_prefix('{') else {
-					continue;
-				};
-				let Some(value) = value.strip_suffix('}') else {
-					continue;
-				};
-				let rs_name = value.trim();
-				let js_name = format!("_{}_{}", rs_name, fastrand::u128(..));
-
-				fn_references.insert(rs_name.to_string(), js_name.clone());
-				attributes.push((attribute.name(), format!("window._dominic_?.{js_name}()")));
+	for token in &input.tokens {
+		match token {
+			dominic_lexer::Token::Static(content) => html.push_str(content),
+			dominic_lexer::Token::CodeReference(rs_name) => {
+				let js_name = fn_references.entry((*rs_name).to_string()).or_insert_with(|| format!("_{}_{}", rs_name, fastrand::u128(..)));
+				html.push_str(&format!("window._dominic_?.{js_name}()"));
 			}
+			_ => {}
+		}
+	}
 
-			for (name, value) in attributes {
-				element.set_attribute(&name, &value)?;
-			}
+	html.truncate(html.trim_end().len());
+	html.drain(..html.len() - html.trim_start().len());
 
-			Ok(())
-		})),
-	)?;
-
-	Ok(HTMLTranspilerOutput { html, fn_references })
+	HTMLTranspilerOutput { html, fn_references }
 }

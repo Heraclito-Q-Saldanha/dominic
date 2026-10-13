@@ -3,34 +3,17 @@ mod html;
 
 use crate::*;
 
-fn split_code(input: &str) -> error::Result<(String, String)> {
-	let mut code = String::new();
-
-	let mut html = lol_html::rewrite_str(
-		input,
-		lol_html::RewriteStrSettings::new()
-			.append_element_content_handler(lol_html::element!("script", |element| {
-				element.remove();
-
-				Ok(())
-			}))
-			.append_element_content_handler(lol_html::text!("script", |text| {
-				code.push_str(text.as_str());
-
-				Ok(())
-			})),
-	)?;
-
-	html.truncate(html.trim_end().len());
-	html.drain(..html.len() - html.trim_start().len());
-
-	Ok((code, html))
-}
-
 pub fn transpile(input: &str) -> error::Result<(html::HTMLTranspilerOutput, code::CodeTranspilerOutput)> {
-	let (code, html) = split_code(input)?;
+	let input = dominic_lexer::parse(input).map_err(|()| error::Error::Lexer)?;
+	let mut code = String::new();
+	for token in &input.tokens {
+		if let dominic_lexer::Token::Script(script) = token {
+			code.push_str(script);
+			code.push('\n');
+		}
+	}
 
-	let html_output = html::transpile_html(&html)?;
+	let html_output = html::transpile_html(&input);
 	let code_output = code::transpile_code(&code, &html_output)?;
 
 	Ok((html_output, code_output))
