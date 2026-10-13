@@ -26,7 +26,7 @@ pub fn build_project(output: &path::Path) -> error::Result<()> {
 		.status()?;
 
 	if !status.success() {
-		return Err(error::Error::Cargo);
+		return Err(error::Error::Cargo(status));
 	}
 
 	let release_dir = expand_path.join("target").join("wasm32-unknown-unknown").join("release").join(format!("{name}.wasm"));

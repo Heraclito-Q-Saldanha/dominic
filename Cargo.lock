@@ -154,6 +154,7 @@ dependencies = [
  "quote",
  "simple_logger",
  "syn 3.0.7",
+ "thiserror",
  "tokio",
  "toml_edit",
  "tower-http",
