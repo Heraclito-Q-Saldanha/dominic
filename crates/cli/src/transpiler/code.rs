@@ -127,7 +127,7 @@ pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: 
 
 		let rs_name = function.sig.ident.to_string();
 
-		if let Some(js_name) = html.references.get(&rs_name) {
+		if let Some(js_name) = html.fn_references.get(&rs_name) {
 			function.attrs.push(syn::parse_quote! {
 				#[dominic_runtime::bindgen(js_name = #js_name, wasm_bindgen = dominic_runtime::wasm_bindgen)]
 			});

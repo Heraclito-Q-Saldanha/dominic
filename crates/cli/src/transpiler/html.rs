@@ -4,11 +4,11 @@ use std::collections;
 
 pub struct HTMLTranspilerOutput {
 	pub html: String,
-	pub references: collections::BTreeMap<String, String>,
+	pub fn_references: collections::BTreeMap<String, String>,
 }
 
 pub fn transpile_html(input: &str) -> error::Result<HTMLTranspilerOutput> {
-	let mut references = collections::BTreeMap::new();
+	let mut fn_references = collections::BTreeMap::new();
 
 	let html = lol_html::rewrite_str(
 		input,
@@ -26,7 +26,7 @@ pub fn transpile_html(input: &str) -> error::Result<HTMLTranspilerOutput> {
 				let rs_name = value.trim();
 				let js_name = format!("_{}_{}", rs_name, fastrand::u128(..));
 
-				references.insert(rs_name.to_string(), js_name.clone());
+				fn_references.insert(rs_name.to_string(), js_name.clone());
 				attributes.push((attribute.name(), format!("window._dominic_?.{js_name}()")));
 			}
 
@@ -38,5 +38,5 @@ pub fn transpile_html(input: &str) -> error::Result<HTMLTranspilerOutput> {
 		})),
 	)?;
 
-	Ok(HTMLTranspilerOutput { html, references })
+	Ok(HTMLTranspilerOutput { html, fn_references })
 }
