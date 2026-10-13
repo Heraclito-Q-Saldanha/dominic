@@ -8,7 +8,12 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
-pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<syn::Ident>> {
+pub struct StateDeclaration {
+	ident: syn::Ident,
+	is_mutable: bool,
+}
+
+pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<StateDeclaration>> {
 	let mut states = Vec::new();
 
 	for statement in mem::take(&mut body.stmts) {
@@ -32,14 +37,17 @@ pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<
 
 		let value = invocation.mac.parse_body::<syn::Expr>()?;
 		let attributes = &invocation.attrs;
-		let pattern = match &local.pat {
-			syn::Pat::Type(pattern) => pattern.pat.as_ref(),
+		let pattern = match &mut local.pat {
+			syn::Pat::Type(pattern) => pattern.pat.as_mut(),
 			pattern => pattern,
 		};
 		let syn::Pat::Ident(binding) = pattern else {
 			return Err(syn::Error::new_spanned(&local.pat, "States need to be named bindings.").into());
 		};
-		states.push(binding.ident.clone());
+		states.push(StateDeclaration {
+			ident: binding.ident.clone(),
+			is_mutable: binding.mutability.take().is_some(),
+		});
 
 		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
 
@@ -49,18 +57,23 @@ pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<
 	Ok(states)
 }
 
-pub fn transpile_state_references(body: &mut syn::Block, states: &[syn::Ident]) {
+pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclaration]) {
 	struct StateReferences<'a> {
-		states: &'a [syn::Ident],
+		states: &'a [StateDeclaration],
 	}
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
 		fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
 			if let syn::Expr::Path(path) = expression {
-				if path.qself.is_none() && self.states.iter().any(|state| path.path.is_ident(state)) {
+				if let Some(state) = self.states.iter().find(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
 					let attributes = &path.attrs;
 					let name = &path.path;
-					*expression = syn::parse_quote!(#(#attributes)* (*#name.get_mut()));
+
+					*expression = if state.is_mutable {
+						syn::parse_quote!(#(#attributes)* (*#name.get_mut()))
+					} else {
+						syn::parse_quote!(#(#attributes)* (*#name.get()))
+					};
 					return;
 				}
 			}
