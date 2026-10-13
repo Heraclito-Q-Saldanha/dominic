@@ -4,12 +4,10 @@ pub use wasm_bindgen::prelude::wasm_bindgen as bindgen;
 use std::ops;
 use std::sync;
 
-static ID_COUNTER: sync::atomic::AtomicUsize = sync::atomic::AtomicUsize::new(0);
-
 #[derive(Debug, Clone)]
-pub struct State<T> {
-	id: usize,
+pub struct State<T, const CALL_SIZE: usize> {
 	value: sync::Arc<sync::RwLock<T>>,
+	callbacks: [fn(); CALL_SIZE],
 }
 
 pub struct StateRef<'a, T> {
@@ -17,17 +15,16 @@ pub struct StateRef<'a, T> {
 }
 
 pub struct StateRefMut<'a, T> {
-	id: usize,
+	callbacks: &'a [fn()],
 	value: sync::RwLockWriteGuard<'a, T>,
 }
 
-impl<T> State<T> {
+impl<T, const CALL_SIZE: usize> State<T, CALL_SIZE> {
 	#[inline]
-	pub fn new(value: T) -> Self {
+	pub fn new(value: T, callbacks: [fn(); CALL_SIZE]) -> Self {
 		let value = sync::Arc::new(sync::RwLock::new(value));
-		let id = ID_COUNTER.fetch_add(1, sync::atomic::Ordering::Relaxed);
 
-		Self { id, value }
+		Self { value, callbacks }
 	}
 
 	#[inline]
@@ -39,10 +36,10 @@ impl<T> State<T> {
 
 	#[inline]
 	pub fn get_mut(&self) -> StateRefMut<'_, T> {
-		let id = self.id;
 		let value = self.value.write().unwrap();
+		let callbacks = &self.callbacks;
 
-		StateRefMut { id, value }
+		StateRefMut { value, callbacks }
 	}
 }
 
@@ -74,6 +71,8 @@ impl<T> ops::DerefMut for StateRefMut<'_, T> {
 impl<T> ops::Drop for StateRefMut<'_, T> {
 	#[inline(always)]
 	fn drop(&mut self) {
-		let _ = format!("sync dom id: {} dropped", self.id);
+		for callback in self.callbacks {
+			callback();
+		}
 	}
 }

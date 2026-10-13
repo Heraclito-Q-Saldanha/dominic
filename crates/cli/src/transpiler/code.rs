@@ -49,7 +49,7 @@ pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<
 			is_mutable: binding.mutability.take().is_some(),
 		});
 
-		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
+		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value, []));
 
 		body.stmts.push(syn::Stmt::Local(local));
 	}
