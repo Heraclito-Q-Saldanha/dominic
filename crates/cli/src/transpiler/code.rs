@@ -76,7 +76,7 @@ pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: 
 		};
 
 		let uninitialized_error = format!("function `{rs_name}` called before initialization");
-		let storage = quote::format_ident!("__{}_closure_{}", &rs_name, fastrand::u128(..));
+		let storage = quote::format_ident!("_{}_closure_{}", &rs_name, fastrand::u128(..));
 
 		function.block = syn::parse_quote!({
 			#storage.with_borrow_mut(|closure| {
