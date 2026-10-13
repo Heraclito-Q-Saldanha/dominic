@@ -1,13 +1,16 @@
 use crate::*;
 
 use std::mem;
+use syn::visit_mut;
 
 pub struct CodeTranspilerOutput {
 	pub code: String,
 	pub init_fn: String,
 }
 
-pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<()> {
+pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<syn::Ident>> {
+	let mut states = Vec::new();
+
 	for statement in mem::take(&mut body.stmts) {
 		let syn::Stmt::Local(mut local) = statement else {
 			body.stmts.push(statement);
@@ -29,13 +32,62 @@ pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<()> 
 
 		let value = invocation.mac.parse_body::<syn::Expr>()?;
 		let attributes = &invocation.attrs;
+		let pattern = match &local.pat {
+			syn::Pat::Type(pattern) => pattern.pat.as_ref(),
+			pattern => pattern,
+		};
+		let syn::Pat::Ident(binding) = pattern else {
+			return Err(syn::Error::new_spanned(&local.pat, "States need to be named bindings.").into());
+		};
+		states.push(binding.ident.clone());
 
 		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
 
 		body.stmts.push(syn::Stmt::Local(local));
 	}
 
-	Ok(())
+	Ok(states)
+}
+
+pub fn transpile_state_references(body: &mut syn::Block, states: &[syn::Ident]) {
+	struct StateReferences<'a> {
+		states: &'a [syn::Ident],
+	}
+
+	impl visit_mut::VisitMut for StateReferences<'_> {
+		fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
+			if let syn::Expr::Path(path) = expression {
+				if path.qself.is_none() && self.states.iter().any(|state| path.path.is_ident(state)) {
+					let attributes = &path.attrs;
+					let name = &path.path;
+					*expression = syn::parse_quote!(#(#attributes)* (*#name.get_mut()));
+					return;
+				}
+			}
+
+			syn::visit_mut::visit_expr_mut(self, expression);
+		}
+
+		fn visit_field_value_mut(&mut self, field: &mut syn::FieldValue) {
+			syn::visit_mut::visit_field_value_mut(self, field);
+			if field.colon_token.is_none() && !matches!(field.expr, syn::Expr::Path(_)) {
+				field.colon_token = Some(Default::default());
+			}
+		}
+
+		fn visit_macro_mut(&mut self, invocation: &mut syn::Macro) {
+			let Ok(mut arguments) = invocation.parse_body_with(syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated) else {
+				return;
+			};
+			for argument in &mut arguments {
+				self.visit_expr_mut(argument);
+			}
+			invocation.tokens = quote::quote!(#arguments);
+		}
+	}
+
+	let mut state_references = StateReferences { states };
+	visit_mut::VisitMut::visit_block_mut(&mut state_references, body);
 }
 
 pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: &mut syn::Block) -> error::Result<()> {
@@ -108,8 +160,9 @@ pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: 
 pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
+	let states = transpile_state_declarations(&mut body)?;
+	transpile_state_references(&mut body, &states);
 	transpile_functions(html, &mut body)?;
-	transpile_state_declarations(&mut body)?;
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 

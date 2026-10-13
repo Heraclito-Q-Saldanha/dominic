@@ -9,7 +9,7 @@ lol_html = "3.0.1"
 simple_logger = "5.2.0"
 clap = { version = "4.6.7", features = ["derive"] }
 toml_edit = "0.25.17"
-syn = { version = "3.0.6", features = ["full"] }
+syn = { version = "3.0.6", features = ["full", "visit-mut"] }
 quote = "1.0.47"
 fastrand = "2.5.0"
 walkdir = "2.5.0"
