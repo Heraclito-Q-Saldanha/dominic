@@ -4,8 +4,8 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
 	#[error("I/O error: {0}")]
 	Io(#[from] std::io::Error),
-	#[error("Invalid page syntax: unclosed script, style, or code reference")]
-	Lexer,
+	#[error("Invalid page syntax: {0}")]
+	Parser(String),
 	#[error("Invalid Rust code in <script>: {0}")]
 	Syn(#[from] syn::Error),
 	#[error("Failed to traverse project directories: {0}")]
