@@ -4,7 +4,7 @@ use std::fs;
 use std::path;
 
 const DEFAULT_PAGE: &'static str = r#"<script>
-	let mut counter = 0;
+	let mut counter = state!(0);
 
 	pub fn add(){
 		counter += 1;

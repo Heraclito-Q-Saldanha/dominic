@@ -1,5 +1,6 @@
 use crate::*;
 
+use std::collections;
 use std::mem;
 use syn::visit_mut;
 
@@ -57,15 +58,19 @@ pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<
 	Ok(states)
 }
 
-pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclaration]) {
+pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclaration]) -> collections::BTreeMap<String, Vec<syn::Ident>> {
 	struct StateReferences<'a> {
 		states: &'a [StateDeclaration],
+		references: Vec<syn::Ident>,
 	}
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
 		fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
 			if let syn::Expr::Path(path) = expression {
 				if let Some(state) = self.states.iter().find(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
+					if !self.references.contains(&state.ident) {
+						self.references.push(state.ident.clone());
+					}
 					let attributes = &path.attrs;
 					let name = &path.path;
 
@@ -99,11 +104,22 @@ pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclarat
 		}
 	}
 
-	let mut state_references = StateReferences { states };
-	visit_mut::VisitMut::visit_block_mut(&mut state_references, body);
+	let mut function_references = collections::BTreeMap::new();
+
+	for statement in &mut body.stmts {
+		let references = Vec::new();
+		let mut references = StateReferences { states, references };
+
+		visit_mut::VisitMut::visit_stmt_mut(&mut references, statement);
+		if let syn::Stmt::Item(syn::Item::Fn(function)) = statement {
+			function_references.insert(function.sig.ident.to_string(), references.references);
+		}
+	}
+
+	function_references
 }
 
-pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: &mut syn::Block) -> error::Result<()> {
+pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: &mut syn::Block, function_references: &collections::BTreeMap<String, Vec<syn::Ident>>) -> error::Result<()> {
 	for statement in mem::take(&mut body.stmts) {
 		let syn::Stmt::Item(syn::Item::Fn(mut function)) = statement else {
 			body.stmts.push(statement);
@@ -149,19 +165,22 @@ pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: 
 			})
 		});
 
+		let state_references = function_references.get(&rs_name).map(Vec::as_slice).unwrap_or_default();
 		let parameters = &function.sig.inputs;
 		let output = &function.sig.output;
 
 		let replacement: syn::Block = syn::parse_quote!({
 			::std::thread_local! {
 				#[allow(non_upper_case_globals)]
-				static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> =
-					const { ::std::cell::RefCell::new(::core::option::Option::None) };
+				static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> = const { ::std::cell::RefCell::new(::core::option::Option::None) };
 			}
 
 			#function
 
-			#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
+			#storage.set(::core::option::Option::Some({
+				#(let #state_references = ::core::clone::Clone::clone(&#state_references);)*
+				::std::boxed::Box::new(move |#parameters| #output #closure_body)
+			}));
 		});
 
 		body.stmts.extend(replacement.stmts);
@@ -174,8 +193,8 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
 	let states = transpile_state_declarations(&mut body)?;
-	transpile_state_references(&mut body, &states);
-	transpile_functions(html, &mut body)?;
+	let function_references = transpile_state_references(&mut body, &states);
+	transpile_functions(html, &mut body, &function_references)?;
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 
