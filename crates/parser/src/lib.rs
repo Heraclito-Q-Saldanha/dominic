@@ -24,26 +24,30 @@ pub enum Token<'source> {
 }
 
 pub fn parse(source: &str) -> Result<'_, Code<'_>> {
-	let (_, parts) = nom::combinator::all_consuming(nom::multi::many0(nom::branch::alt((
-		consumed(block("<script>", "</script>")).map(|(span, code)| vec![(span, Token::Script(code))]),
-		consumed(block("<style>", "</style>")).map(|(span, code)| vec![(span, Token::Style(code))]),
-		block("<!--", "-->").map(|_| Vec::new()),
-		element,
-		reference.map(|(span, code)| vec![(span, Token::CodeReference(code))]),
-		nom::branch::alt((is_not("<{"), tag("<"))).map(|_| Vec::new()),
-	))))
-	.parse(source)?;
-
+	let mut input = source;
 	let mut tokens = Vec::new();
 	let mut cursor = 0;
 
-	for (span, token) in parts.into_iter().flatten() {
-		let start = nom::Offset::offset(source, span);
-		if cursor < start {
-			tokens.push(Token::Static(&source[cursor..start]));
+	while !input.is_empty() {
+		let (rest, parsed) = nom::branch::alt((
+			consumed(block("<script>", "</script>")).map(|(span, code)| vec![(span, Token::Script(code))]),
+			consumed(block("<style>", "</style>")).map(|(span, code)| vec![(span, Token::Style(code))]),
+			block("<!--", "-->").map(|_| Vec::new()),
+			element,
+			reference.map(|(span, code)| vec![(span, Token::CodeReference(code))]),
+			nom::branch::alt((is_not("<{"), tag("<"))).map(|_| Vec::new()),
+		))
+		.parse(input)?;
+
+		for (span, token) in parsed {
+			let start = nom::Offset::offset(source, span);
+			if cursor < start {
+				tokens.push(Token::Static(&source[cursor..start]));
+			}
+			tokens.push(token);
+			cursor = start + span.len();
 		}
-		tokens.push(token);
-		cursor = start + span.len();
+		input = rest;
 	}
 
 	if cursor < source.len() {
@@ -81,12 +85,12 @@ fn element(input: &str) -> Result<'_, (&str, Vec<SpannedToken<'_>>)> {
 	Ok((input, attributes.into_iter().flatten().collect()))
 }
 
-fn attribute(input: &str) -> Result<'_, (&str, Vec<SpannedToken<'_>>)> {
+fn attribute(input: &str) -> Result<'_, (&str, Option<SpannedToken<'_>>)> {
 	let (input, name) = nom::bytes::complete::take_while1(|c: char| !c.is_ascii_whitespace() && !matches!(c, '=' | '>' | '/' | '"' | '\'' | '<' | '{')).parse(input)?;
 	let (input, value) = opt(nom::sequence::preceded((multispace0, char('='), multispace0), cut(attribute_value))).parse(input)?;
-	let tokens = value.flatten().into_iter().map(|(span, code)| (span, Token::AttributeReference { name, code })).collect();
+	let token = value.flatten().map(|(span, code)| (span, Token::AttributeReference { name, code }));
 
-	Ok((input, tokens))
+	Ok((input, token))
 }
 
 fn attribute_value(input: &str) -> Result<'_, (&str, Option<(&str, &str)>)> {
