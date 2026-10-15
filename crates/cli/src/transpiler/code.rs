@@ -14,7 +14,9 @@ pub struct StateDeclaration {
 	is_mutable: bool,
 }
 
-pub fn transpile_references(body: &mut syn::Block, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<()> {
+pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<Vec<syn::Ident>> {
+	let mut functions = Vec::new();
+
 	for (id, reference) in &html.references {
 		if reference.attribute.is_some() {
 			continue;
@@ -28,9 +30,11 @@ pub fn transpile_references(body: &mut syn::Block, html: &transpiler::html::HTML
 				::dominic_runtime::dom::update_segment(#id, &::std::format!("{}", #expression))
 			}
 		});
+
+		functions.push(name);
 	}
 
-	Ok(())
+	Ok(functions)
 }
 
 pub fn transpile_states(body: &mut syn::Block) -> error::Result<collections::BTreeMap<String, Vec<syn::Ident>>> {
@@ -200,9 +204,21 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
-	transpile_references(&mut body, html)?;
+	let updates = transpile_segments(&mut body, html)?;
 	let references = transpile_states(&mut body)?;
 	transpile_functions(&mut body, &references)?;
+
+	body.stmts.push(syn::parse_quote! {
+		fn _init_segments() -> ::dominic_runtime::error::Result<()> {
+			#(#updates()?;)*
+
+			Ok(())
+		}
+	});
+
+	body.stmts.push(syn::parse_quote! {
+		_init_segments().expect("Failed to initialize page segments");
+	});
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 
