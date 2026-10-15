@@ -19,7 +19,7 @@ pub struct StateRef<'a, T> {
 
 pub struct StateRefMut<'a, T> {
 	callbacks: &'a [fn()],
-	value: sync::RwLockWriteGuard<'a, T>,
+	value: Option<sync::RwLockWriteGuard<'a, T>>,
 }
 
 impl<T, const CALL_SIZE: usize> State<T, CALL_SIZE> {
@@ -39,7 +39,7 @@ impl<T, const CALL_SIZE: usize> State<T, CALL_SIZE> {
 
 	#[inline]
 	pub fn get_mut(&self) -> StateRefMut<'_, T> {
-		let value = self.value.write().unwrap();
+		let value = Some(self.value.write().unwrap());
 		let callbacks = &self.callbacks;
 
 		StateRefMut { value, callbacks }
@@ -60,20 +60,22 @@ impl<T> ops::Deref for StateRefMut<'_, T> {
 
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target {
-		self.value.deref()
+		self.value.as_deref().unwrap()
 	}
 }
 
 impl<T> ops::DerefMut for StateRefMut<'_, T> {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target {
-		self.value.deref_mut()
+		self.value.as_deref_mut().unwrap()
 	}
 }
 
 impl<T> ops::Drop for StateRefMut<'_, T> {
 	#[inline(always)]
 	fn drop(&mut self) {
+		drop(self.value.take());
+
 		for callback in self.callbacks {
 			callback();
 		}
