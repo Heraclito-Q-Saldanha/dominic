@@ -33,7 +33,7 @@ pub fn transpile_references(body: &mut syn::Block, html: &transpiler::html::HTML
 	Ok(())
 }
 
-pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<StateDeclaration>> {
+pub fn transpile_states(body: &mut syn::Block) -> error::Result<collections::BTreeMap<String, Vec<syn::Ident>>> {
 	let mut states = Vec::new();
 
 	for statement in mem::take(&mut body.stmts) {
@@ -74,10 +74,6 @@ pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<
 		body.stmts.push(syn::Stmt::Local(local));
 	}
 
-	Ok(states)
-}
-
-pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclaration]) -> collections::BTreeMap<String, Vec<syn::Ident>> {
 	struct StateReferences<'a> {
 		states: &'a [StateDeclaration],
 		references: Vec<syn::Ident>,
@@ -127,7 +123,7 @@ pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclarat
 
 	for statement in &mut body.stmts {
 		let references = Vec::new();
-		let mut references = StateReferences { states, references };
+		let mut references = StateReferences { states: &states, references };
 
 		visit_mut::VisitMut::visit_stmt_mut(&mut references, statement);
 		if let syn::Stmt::Item(syn::Item::Fn(function)) = statement {
@@ -135,7 +131,7 @@ pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclarat
 		}
 	}
 
-	function_references
+	Ok(function_references)
 }
 
 pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap<String, Vec<syn::Ident>>) -> error::Result<()> {
@@ -205,9 +201,7 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
 	transpile_references(&mut body, html)?;
-
-	let states = transpile_state_declarations(&mut body)?;
-	let references = transpile_state_references(&mut body, &states);
+	let references = transpile_states(&mut body)?;
 	transpile_functions(&mut body, &references)?;
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
