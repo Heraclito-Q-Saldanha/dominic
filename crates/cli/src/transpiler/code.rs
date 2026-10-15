@@ -119,7 +119,7 @@ pub fn transpile_state_references(body: &mut syn::Block, states: &[StateDeclarat
 	function_references
 }
 
-pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: &mut syn::Block, references: &collections::BTreeMap<String, Vec<syn::Ident>>) -> error::Result<()> {
+pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap<String, Vec<syn::Ident>>) -> error::Result<()> {
 	for statement in mem::take(&mut body.stmts) {
 		let syn::Stmt::Item(syn::Item::Fn(mut function)) = statement else {
 			body.stmts.push(statement);
@@ -142,13 +142,6 @@ pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: 
 		}
 
 		let rs_name = function.sig.ident.to_string();
-
-		if let Some(js_name) = html.fn_references.get(&rs_name) {
-			function.attrs.push(syn::parse_quote! {
-				#[dominic_runtime::bindgen(js_name = #js_name, wasm_bindgen = dominic_runtime::wasm_bindgen)]
-			});
-			function.vis = syn::parse_quote!(pub);
-		}
 
 		let function_block = &function.block;
 		let closure_body = match function.sig.safety {
@@ -189,12 +182,12 @@ pub fn transpile_functions(html: &transpiler::html::HTMLTranspilerOutput, body: 
 	Ok(())
 }
 
-pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {
+pub fn transpile_code(code: &str) -> error::Result<CodeTranspilerOutput> {
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
 	let states = transpile_state_declarations(&mut body)?;
 	let references = transpile_state_references(&mut body, &states);
-	transpile_functions(html, &mut body, &references)?;
+	transpile_functions(&mut body, &references)?;
 
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 

@@ -15,7 +15,7 @@ pub fn transpile(input: &str) -> error::Result<(html::HTMLTranspilerOutput, code
 	}
 
 	let html_output = html::transpile_html(&input);
-	let code_output = code::transpile_code(&code, &html_output)?;
+	let code_output = code::transpile_code(&code)?;
 
 	Ok((html_output, code_output))
 }
