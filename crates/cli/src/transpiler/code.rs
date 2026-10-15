@@ -14,6 +14,25 @@ pub struct StateDeclaration {
 	is_mutable: bool,
 }
 
+pub fn transpile_references(body: &mut syn::Block, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<()> {
+	for (id, reference) in &html.references {
+		if reference.attribute.is_some() {
+			continue;
+		}
+
+		let expression = syn::parse_str::<syn::Expr>(&reference.code)?;
+		let name = quote::format_ident!("_update_segment_{id}");
+
+		body.stmts.push(syn::parse_quote! {
+			fn #name() -> ::dominic_runtime::error::Result<()> {
+				::dominic_runtime::dom::update_segment(#id, &::std::format!("{}", #expression))
+			}
+		});
+	}
+
+	Ok(())
+}
+
 pub fn transpile_state_declarations(body: &mut syn::Block) -> error::Result<Vec<StateDeclaration>> {
 	let mut states = Vec::new();
 
@@ -182,8 +201,10 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 	Ok(())
 }
 
-pub fn transpile_code(code: &str) -> error::Result<CodeTranspilerOutput> {
+pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
+
+	transpile_references(&mut body, html)?;
 
 	let states = transpile_state_declarations(&mut body)?;
 	let references = transpile_state_references(&mut body, &states);
