@@ -93,7 +93,7 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 	struct StateReferences<'a> {
 		states: &'a [StateDeclaration],
 		references: Vec<syn::Ident>,
-		is_update: bool,
+		read_only: bool,
 	}
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
@@ -106,7 +106,7 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 					let attributes = &path.attrs;
 					let name = &path.path;
 
-					*expression = if state.is_mutable && !self.is_update {
+					*expression = if state.is_mutable && !self.read_only {
 						syn::parse_quote!(#(#attributes)* (*#name.get_mut()))
 					} else {
 						syn::parse_quote!(#(#attributes)* (*#name.get()))
@@ -178,7 +178,7 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 		let mut visitor = StateReferences {
 			states: &states,
 			references: Vec::new(),
-			is_update: matches!(statement, syn::Stmt::Item(syn::Item::Fn(function)) if updates.contains(&function.sig.ident)),
+			read_only: matches!(statement, syn::Stmt::Item(syn::Item::Fn(function)) if updates.contains(&function.sig.ident)),
 		};
 
 		visit_mut::VisitMut::visit_stmt_mut(&mut visitor, statement);
