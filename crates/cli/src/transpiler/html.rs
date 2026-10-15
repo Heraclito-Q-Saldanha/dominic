@@ -14,10 +14,10 @@ pub fn transpile_html(input: &dominic_parser::Code<'_>) -> HTMLTranspilerOutput 
 	let mut references = collections::BTreeMap::new();
 	let mut html = String::with_capacity(input.source.len());
 
-	for token in &input.tokens {
-		match token {
-			dominic_parser::Token::Static(content) => html.push_str(content),
-			dominic_parser::Token::AttributeReference { name, code } => {
+	for node in &input.nodes {
+		match node {
+			dominic_parser::Node::Static(content) => html.push_str(content),
+			dominic_parser::Node::AttributeReference { name, code } => {
 				let id = references.len();
 				let start = html.trim_end().strip_suffix('=').unwrap().trim_end().len() - name.len();
 
@@ -29,7 +29,7 @@ pub fn transpile_html(input: &dominic_parser::Code<'_>) -> HTMLTranspilerOutput 
 
 				references.insert(id, Reference { code, attribute });
 			}
-			dominic_parser::Token::CodeReference(code) => {
+			dominic_parser::Node::CodeReference(code) => {
 				let id = references.len();
 
 				html.push_str(&format!("<!--dominic:{id}--><!--/dominic:{id}-->"));
