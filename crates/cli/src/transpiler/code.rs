@@ -9,11 +9,6 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
-pub struct StateDeclaration {
-	ident: syn::Ident,
-	is_mutable: bool,
-}
-
 pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<Vec<syn::Ident>> {
 	let mut functions = Vec::new();
 	let mut exports = collections::BTreeMap::new();
@@ -88,50 +83,17 @@ pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::html::HTMLTr
 	Ok(functions)
 }
 
-pub fn transpile_states(body: &mut syn::Block) -> error::Result<collections::BTreeMap<String, Vec<syn::Ident>>> {
-	let mut states = Vec::new();
-
-	for statement in mem::take(&mut body.stmts) {
-		let syn::Stmt::Local(mut local) = statement else {
-			body.stmts.push(statement);
-			continue;
-		};
-
-		let Some(init) = &mut local.init else {
-			body.stmts.push(syn::Stmt::Local(local));
-			continue;
-		};
-		let syn::Expr::Macro(invocation) = init.expr.as_ref() else {
-			body.stmts.push(syn::Stmt::Local(local));
-			continue;
-		};
-		if !invocation.mac.path.is_ident("state") {
-			body.stmts.push(syn::Stmt::Local(local));
-			continue;
-		}
-
-		let value = invocation.mac.parse_body::<syn::Expr>()?;
-		let attributes = &invocation.attrs;
-		let pattern = match &mut local.pat {
-			syn::Pat::Type(pattern) => pattern.pat.as_mut(),
-			pattern => pattern,
-		};
-		let syn::Pat::Ident(binding) = pattern else {
-			return Err(syn::Error::new_spanned(&local.pat, "States need to be named bindings.").into());
-		};
-		states.push(StateDeclaration {
-			ident: binding.ident.clone(),
-			is_mutable: binding.mutability.take().is_some(),
-		});
-
-		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value, []));
-
-		body.stmts.push(syn::Stmt::Local(local));
+pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error::Result<collections::BTreeMap<String, Vec<syn::Ident>>> {
+	struct StateDeclaration {
+		ident: syn::Ident,
+		is_mutable: bool,
+		index: usize,
 	}
 
 	struct StateReferences<'a> {
 		states: &'a [StateDeclaration],
 		references: Vec<syn::Ident>,
+		is_update: bool,
 	}
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
@@ -144,7 +106,7 @@ pub fn transpile_states(body: &mut syn::Block) -> error::Result<collections::BTr
 					let attributes = &path.attrs;
 					let name = &path.path;
 
-					*expression = if state.is_mutable {
+					*expression = if state.is_mutable && !self.is_update {
 						syn::parse_quote!(#(#attributes)* (*#name.get_mut()))
 					} else {
 						syn::parse_quote!(#(#attributes)* (*#name.get()))
@@ -174,16 +136,70 @@ pub fn transpile_states(body: &mut syn::Block) -> error::Result<collections::BTr
 		}
 	}
 
+	let mut states = Vec::new();
+
+	for (index, statement) in body.stmts.iter_mut().enumerate() {
+		let syn::Stmt::Local(local) = statement else {
+			continue;
+		};
+
+		let Some(init) = &mut local.init else {
+			continue;
+		};
+		let syn::Expr::Macro(invocation) = init.expr.as_ref() else {
+			continue;
+		};
+		if !invocation.mac.path.is_ident("state") {
+			continue;
+		}
+
+		let value = invocation.mac.parse_body::<syn::Expr>()?;
+		let attributes = &invocation.attrs;
+		let pattern = match &mut local.pat {
+			syn::Pat::Type(pattern) => pattern.pat.as_mut(),
+			pattern => pattern,
+		};
+		let syn::Pat::Ident(binding) = pattern else {
+			return Err(syn::Error::new_spanned(&local.pat, "States need to be named bindings.").into());
+		};
+
+		states.push(StateDeclaration {
+			ident: binding.ident.clone(),
+			is_mutable: binding.mutability.take().is_some(),
+			index,
+		});
+
+		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value, []));
+	}
+
 	let mut function_references = collections::BTreeMap::new();
 
 	for statement in &mut body.stmts {
-		let references = Vec::new();
-		let mut references = StateReferences { states: &states, references };
+		let mut visitor = StateReferences {
+			states: &states,
+			references: Vec::new(),
+			is_update: matches!(statement, syn::Stmt::Item(syn::Item::Fn(function)) if updates.contains(&function.sig.ident)),
+		};
 
-		visit_mut::VisitMut::visit_stmt_mut(&mut references, statement);
+		visit_mut::VisitMut::visit_stmt_mut(&mut visitor, statement);
+
 		if let syn::Stmt::Item(syn::Item::Fn(function)) = statement {
-			function_references.insert(function.sig.ident.to_string(), references.references);
+			function_references.insert(function.sig.ident.to_string(), visitor.references);
 		}
+	}
+
+	for state in &states {
+		let callbacks = updates
+			.iter()
+			.filter(|name| function_references.get(&name.to_string()).is_some_and(|references| references.contains(&state.ident)));
+		let syn::Stmt::Local(local) = &mut body.stmts[state.index] else {
+			unreachable!();
+		};
+		let syn::Expr::Call(init) = local.init.as_mut().unwrap().expr.as_mut() else {
+			unreachable!();
+		};
+
+		init.args[1] = syn::parse_quote!([#(|| #callbacks().expect("Failed to update page reference")),*]);
 	}
 
 	Ok(function_references)
@@ -256,7 +272,7 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
 	let updates = transpile_segments(&mut body, html)?;
-	let references = transpile_states(&mut body)?;
+	let references = transpile_states(&mut body, &updates)?;
 	transpile_functions(&mut body, &references)?;
 
 	body.stmts.push(syn::parse_quote! {
