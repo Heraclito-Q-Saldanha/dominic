@@ -8,6 +8,8 @@ pub enum Error {
 	DocumentUnavailable,
 	#[error("Segment {0} not found")]
 	SegmentNotFound(usize),
+	#[error("Attribute {0} not found")]
+	AttributeNotFound(usize),
 	#[error("Unknown error: {0:?}")]
 	Unknown(wasm_bindgen::JsValue),
 }

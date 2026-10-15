@@ -2,6 +2,24 @@ use crate::*;
 
 const SHOW_COMMENT: u32 = 0x80;
 
+pub fn update_attribute(id: usize, name: &str, value: &str) -> error::Result<()> {
+	let Some(window) = web_sys::window() else {
+		return Err(error::Error::WindowUnavailable);
+	};
+
+	let Some(document) = window.document() else {
+		return Err(error::Error::DocumentUnavailable);
+	};
+
+	let Some(element) = document.query_selector(&format!("[data-dominic-{id}]"))? else {
+		return Err(error::Error::AttributeNotFound(id));
+	};
+
+	element.set_attribute(name, value)?;
+
+	Ok(())
+}
+
 pub fn update_segment(id: usize, value: &str) -> error::Result<()> {
 	let Some(window) = web_sys::window() else {
 		return Err(error::Error::WindowUnavailable);
