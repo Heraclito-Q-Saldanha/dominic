@@ -16,18 +16,69 @@ pub struct StateDeclaration {
 
 pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<Vec<syn::Ident>> {
 	let mut functions = Vec::new();
+	let mut exports = collections::BTreeMap::new();
 
 	for (id, reference) in &html.references {
-		if reference.attribute.is_some() {
-			continue;
-		}
-
 		let expression = syn::parse_str::<syn::Expr>(&reference.code)?;
 		let name = quote::format_ident!("_update_segment_{id}");
 
+		let update = match &reference.attribute {
+			Some(attribute) => {
+				let expression = match &expression {
+					syn::Expr::Closure(closure) => {
+						let name = quote::format_ident!("_attribute_{id}");
+						let export = format!("_function_{:032x}", fastrand::u128(..));
+						let inputs = &closure.inputs;
+						let output = &closure.output;
+						let block = &closure.body;
+
+						body.stmts.push(syn::parse2(quote::quote! {
+							#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, js_name = #export)]
+							pub fn #name(#inputs) #output { #block }
+						})?);
+
+						let call = format!("window._dominic_?.{export}()");
+
+						exports.insert(name.to_string(), export);
+
+						syn::parse_quote!(#call)
+					}
+					syn::Expr::Path(path) if path.qself.is_none() => {
+						let function = body.stmts.iter_mut().find_map(|statement| match statement {
+							syn::Stmt::Item(syn::Item::Fn(function)) if path.path.is_ident(&function.sig.ident) => Some(function),
+							_ => None,
+						});
+
+						match function {
+							Some(function) => {
+								let export = exports.entry(function.sig.ident.to_string()).or_insert_with(|| {
+									let name = format!("_function_{:032x}", fastrand::u128(..));
+
+									function.vis = syn::parse_quote!(pub);
+									function.attrs.push(syn::parse_quote! {
+										#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, js_name = #name)]
+									});
+
+									name
+								});
+								let call = format!("window._dominic_?.{export}()");
+
+								syn::parse_quote!(#call)
+							}
+							None => expression,
+						}
+					}
+					_ => expression,
+				};
+
+				quote::quote!(::dominic_runtime::dom::update_attribute(#id, #attribute, &::std::format!("{}", #expression)))
+			}
+			None => quote::quote!(::dominic_runtime::dom::update_segment(#id, &::std::format!("{}", #expression))),
+		};
+
 		body.stmts.push(syn::parse_quote! {
 			fn #name() -> ::dominic_runtime::error::Result<()> {
-				::dominic_runtime::dom::update_segment(#id, &::std::format!("{}", #expression))
+				#update
 			}
 		});
 
@@ -189,10 +240,10 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 
 			#function
 
-			#storage.set(::core::option::Option::Some({
+			{
 				#(let #references = ::core::clone::Clone::clone(&#references);)*
-				::std::boxed::Box::new(move |#parameters| #output #closure_body)
-			}));
+				#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
+			}
 		});
 
 		body.stmts.extend(replacement.stmts);
