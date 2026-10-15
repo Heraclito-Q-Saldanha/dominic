@@ -15,6 +15,10 @@ pub fn update_attribute(id: usize, name: &str, value: &str) -> error::Result<()>
 		return Err(error::Error::AttributeNotFound(id));
 	};
 
+	if js_sys::Reflect::has(&element, &name.into())? {
+		js_sys::Reflect::set(element.as_ref(), &name.into(), &value.into())?;
+	}
+
 	element.set_attribute(name, value)?;
 
 	Ok(())

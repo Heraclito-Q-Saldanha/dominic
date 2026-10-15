@@ -259,6 +259,7 @@ dependencies = [
 name = "dominic-runtime"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "thiserror",
  "wasm-bindgen",
  "web-sys",
