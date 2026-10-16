@@ -214,36 +214,12 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 	struct StateReferences<'a> {
 		states: &'a [StateDeclaration],
 		references: Vec<syn::Ident>,
-		loop_bindings: Vec<syn::Ident>,
 		read_only: bool,
 	}
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
-		fn visit_expr_for_loop_mut(&mut self, expression: &mut syn::ExprForLoop) {
-			let iterator = &mut expression.expr;
-			if let syn::Expr::Path(path) = iterator.as_ref() {
-				if self.states.iter().any(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
-					*iterator = syn::parse_quote!(&#iterator);
-				}
-			}
-
-			let binding_count = self.loop_bindings.len();
-
-			if let syn::Pat::Ident(binding) = expression.pat.as_ref() {
-				self.loop_bindings.push(binding.ident.clone());
-			}
-
-			visit_mut::visit_expr_for_loop_mut(self, expression);
-			self.loop_bindings.truncate(binding_count);
-		}
-
 		fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
 			if let syn::Expr::Path(path) = expression {
-				if path.qself.is_none() && self.loop_bindings.iter().any(|binding| path.path.is_ident(binding)) {
-					*expression = syn::parse_quote!(*#expression);
-					return;
-				}
-
 				if let Some(state) = self.states.iter().find(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
 					if !self.references.contains(&state.ident) {
 						self.references.push(state.ident.clone());
@@ -263,18 +239,6 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 			}
 
 			syn::visit_mut::visit_expr_mut(self, expression);
-		}
-
-		fn visit_expr_unary_mut(&mut self, expression: &mut syn::ExprUnary) {
-			if matches!(expression.op, syn::UnOp::Deref(_)) {
-				if let syn::Expr::Path(path) = expression.expr.as_ref() {
-					if self.loop_bindings.iter().any(|binding| path.path.is_ident(binding)) {
-						return;
-					}
-				}
-			}
-
-			visit_mut::visit_expr_unary_mut(self, expression);
 		}
 
 		fn visit_field_value_mut(&mut self, field: &mut syn::FieldValue) {
@@ -340,7 +304,6 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 		let mut visitor = StateReferences {
 			states: &states,
 			references: Vec::new(),
-			loop_bindings: Vec::new(),
 			read_only: matches!(statement, syn::Stmt::Item(syn::Item::Fn(function)) if updates.contains(&function.sig.ident)),
 		};
 
