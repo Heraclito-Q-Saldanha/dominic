@@ -2,6 +2,7 @@ use crate::*;
 
 use std::collections;
 use std::mem;
+
 use syn::parse::Parser;
 use syn::visit_mut;
 
@@ -213,27 +214,42 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 	struct StateReferences<'a> {
 		states: &'a [StateDeclaration],
 		references: Vec<syn::Ident>,
+		loop_bindings: Vec<syn::Ident>,
 		read_only: bool,
 	}
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
 		fn visit_expr_for_loop_mut(&mut self, expression: &mut syn::ExprForLoop) {
-			if let syn::Expr::Path(path) = expression.expr.as_ref() {
+			let iterator = expression.expr.clone();
+			if let syn::Expr::Path(path) = iterator.as_ref() {
 				if self.states.iter().any(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
-					let iterator = expression.expr.as_ref().clone();
 					expression.expr = Box::new(syn::parse_quote!(&#iterator));
 				}
 			}
 
-			syn::visit_mut::visit_expr_for_loop_mut(self, expression);
+			self.visit_expr_mut(&mut expression.expr);
+			let binding_count = self.loop_bindings.len();
+
+			if let syn::Pat::Ident(binding) = expression.pat.as_ref() {
+				self.loop_bindings.push(binding.ident.clone());
+			}
+
+			self.visit_block_mut(&mut expression.body);
+			self.loop_bindings.truncate(binding_count);
 		}
 
 		fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
 			if let syn::Expr::Path(path) = expression {
+				if path.qself.is_none() && self.loop_bindings.iter().any(|binding| path.path.is_ident(binding)) {
+					*expression = syn::parse_quote!(*#expression);
+					return;
+				}
+
 				if let Some(state) = self.states.iter().find(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
 					if !self.references.contains(&state.ident) {
 						self.references.push(state.ident.clone());
 					}
+
 					let attributes = &path.attrs;
 					let name = &path.path;
 
@@ -242,6 +258,7 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 					} else {
 						syn::parse_quote!(#(#attributes)* *#name.get())
 					};
+
 					return;
 				}
 			}
@@ -249,8 +266,21 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 			syn::visit_mut::visit_expr_mut(self, expression);
 		}
 
+		fn visit_expr_unary_mut(&mut self, expression: &mut syn::ExprUnary) {
+			if matches!(expression.op, syn::UnOp::Deref(_)) {
+				if let syn::Expr::Path(path) = expression.expr.as_ref() {
+					if self.loop_bindings.iter().any(|binding| path.path.is_ident(binding)) {
+						return;
+					}
+				}
+			}
+
+			visit_mut::visit_expr_unary_mut(self, expression);
+		}
+
 		fn visit_field_value_mut(&mut self, field: &mut syn::FieldValue) {
 			syn::visit_mut::visit_field_value_mut(self, field);
+
 			if field.colon_token.is_none() && !matches!(field.expr, syn::Expr::Path(_)) {
 				field.colon_token = Some(Default::default());
 			}
@@ -260,9 +290,11 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 			let Ok(mut arguments) = invocation.parse_body_with(syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated) else {
 				return;
 			};
+
 			for argument in &mut arguments {
 				self.visit_expr_mut(argument);
 			}
+
 			invocation.tokens = quote::quote!(#arguments);
 		}
 	}
@@ -309,6 +341,7 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 		let mut visitor = StateReferences {
 			states: &states,
 			references: Vec::new(),
+			loop_bindings: Vec::new(),
 			read_only: matches!(statement, syn::Stmt::Item(syn::Item::Fn(function)) if updates.contains(&function.sig.ident)),
 		};
 
