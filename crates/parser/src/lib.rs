@@ -28,10 +28,9 @@ pub enum Node<'source> {
 		body: Vec<Node<'source>>,
 		else_body: Option<Vec<Node<'source>>>,
 	},
-	Each {
+	For {
+		pattern: &'source str,
 		items: &'source str,
-		item: &'source str,
-		index: Option<&'source str>,
 		body: Vec<Node<'source>>,
 	},
 	Static(&'source str),
@@ -74,6 +73,7 @@ fn nodes(source: &str) -> Result<'_, (&str, Vec<Node<'_>>)> {
 	}
 
 	let end = source.len() - input.len();
+
 	if cursor < end {
 		nodes.push(Node::Static(&source[cursor..end]));
 	}
@@ -91,7 +91,7 @@ fn reference(input: &str) -> Result<'_, (&str, (&str, &str))> {
 
 fn directive(input: &str) -> Result<'_, (&str, SpannedNode<'_>)> {
 	peek(tag("{#")).parse(input)?;
-	consumed(cut(nom::branch::alt((conditional, each)))).parse(input)
+	consumed(cut(nom::branch::alt((conditional, for_loop)))).parse(input)
 }
 
 fn conditional(input: &str) -> Result<'_, (&str, Node<'_>)> {
@@ -120,31 +120,37 @@ fn conditional(input: &str) -> Result<'_, (&str, Node<'_>)> {
 	))
 }
 
-fn each(input: &str) -> Result<'_, (&str, Node<'_>)> {
-	let (input, (_, _, header, _)) = (tag("{#each"), multispace1, take_until("}"), char('}')).parse(input)?;
-	let Some((separator, _)) = header
-		.rmatch_indices("as")
-		.find(|(index, _)| header[..*index].ends_with(char::is_whitespace) && header[index + 2..].starts_with(char::is_whitespace))
-	else {
-		return Err(nom::Err::Error(nom::error::Error::new(header, nom::error::ErrorKind::Tag)));
-	};
+fn for_loop(input: &str) -> Result<'_, (&str, Node<'_>)> {
+	let (input, _) = (tag("{#for"), multispace1).parse(input)?;
+	let (input, (pattern, _)) = consumed(nom::multi::many_till(rust_fragment, peek((multispace1, tag("in"), multispace1)))).parse(input)?;
+	let (input, (_, _, _, items, _)) = (multispace1, tag("in"), multispace1, recognize(nom::multi::many0(rust_fragment)), char('}')).parse(input)?;
+	let pattern = pattern.trim();
+	let items = items.trim();
 
-	let items = header[..separator].trim();
-
-	if items.is_empty() {
-		return Err(nom::Err::Error(nom::error::Error::new(header, nom::error::ErrorKind::Verify)));
+	if pattern.is_empty() || items.is_empty() {
+		return Err(nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
 	}
 
-	let (_, (item, index, _)) =
-		all_consuming((identifier, opt(nom::sequence::preceded((multispace0, char(','), multispace0), identifier)), multispace0)).parse(header[separator + 2..].trim_start())?;
 	let (input, body) = nodes(input)?;
-	let (input, _) = verify(reference, |(_, closing)| *closing == "/each").parse(input)?;
+	let (input, _) = verify(reference, |(_, closing)| *closing == "/for").parse(input)?;
 
-	Ok((input, Node::Each { items, item, index, body }))
+	Ok((input, Node::For { pattern, items, body }))
 }
 
-fn identifier(input: &str) -> Result<'_, (&str, &str)> {
-	recognize((satisfy(|c| c == '_' || c.is_alphabetic()), take_while(|c: char| c == '_' || c.is_alphanumeric()))).parse(input)
+fn rust_fragment(input: &str) -> Result<'_, (&str, &str)> {
+	nom::branch::alt((
+		recognize((char('('), nom::multi::many0(rust_fragment), char(')'))),
+		recognize((char('['), nom::multi::many0(rust_fragment), char(']'))),
+		recognize((char('{'), nom::multi::many0(rust_fragment), char('}'))),
+		recognize((char('"'), opt(escaped(is_not("\"\\"), '\\', anychar)), char('"'))),
+		recognize((
+			char('\''),
+			nom::branch::alt((nom::sequence::preceded(char('\\'), anychar), satisfy(|c| c != '\\' && c != '\''))),
+			char('\''),
+		)),
+		recognize(satisfy(|c| !matches!(c, '(' | ')' | '[' | ']' | '{' | '}' | '"'))),
+	))
+	.parse(input)
 }
 
 fn element(input: &str) -> Result<'_, (&str, Vec<SpannedNode<'_>>)> {
