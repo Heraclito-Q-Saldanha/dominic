@@ -11,6 +11,11 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
+struct FunctionReferences {
+	states: Vec<syn::Ident>,
+	callbacks: Vec<syn::Ident>,
+}
+
 pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::html::HTMLTranspilerOutput<'_>) -> error::Result<Vec<syn::Ident>> {
 	let mut functions = Vec::new();
 	let mut exports = collections::BTreeMap::new();
@@ -204,11 +209,10 @@ fn render_nodes(nodes: &[dominic_parser::Node<'_>]) -> error::Result<syn::Block>
 	}))
 }
 
-pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error::Result<collections::BTreeMap<String, Vec<syn::Ident>>> {
+fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error::Result<collections::BTreeMap<String, FunctionReferences>> {
 	struct StateDeclaration {
 		ident: syn::Ident,
 		is_mutable: bool,
-		index: usize,
 	}
 
 	struct StateReferences<'a> {
@@ -264,7 +268,7 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 
 	let mut states = Vec::new();
 
-	for (index, statement) in body.stmts.iter_mut().enumerate() {
+	for statement in &mut body.stmts {
 		let syn::Stmt::Local(local) = statement else {
 			continue;
 		};
@@ -292,10 +296,9 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 		states.push(StateDeclaration {
 			ident: binding.ident.clone(),
 			is_mutable: binding.mutability.take().is_some(),
-			index,
 		});
 
-		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value, []));
+		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
 	}
 
 	let mut function_references = collections::BTreeMap::new();
@@ -310,28 +313,53 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 		visit_mut::VisitMut::visit_stmt_mut(&mut visitor, statement);
 
 		if let syn::Stmt::Item(syn::Item::Fn(function)) = statement {
-			function_references.insert(function.sig.ident.to_string(), visitor.references);
+			function_references.insert(
+				function.sig.ident.to_string(),
+				FunctionReferences {
+					states: visitor.references,
+					callbacks: Vec::new(),
+				},
+			);
 		}
 	}
 
-	for state in &states {
-		let callbacks = updates
-			.iter()
-			.filter(|name| function_references.get(&name.to_string()).is_some_and(|references| references.contains(&state.ident)));
-		let syn::Stmt::Local(local) = &mut body.stmts[state.index] else {
-			unreachable!();
-		};
-		let syn::Expr::Call(init) = local.init.as_mut().unwrap().expr.as_mut() else {
-			unreachable!();
+	let mut update_states = Vec::new();
+
+	for update in updates {
+		let update_name = update.to_string();
+		let Some(references) = function_references.get(&update_name) else {
+			continue;
 		};
 
-		init.args[1] = syn::parse_quote!([#(|| #callbacks().expect("Failed to update page reference")),*]);
+		let mut mutable_states = Vec::new();
+		for state in &states {
+			if state.is_mutable && references.states.contains(&state.ident) {
+				mutable_states.push(state.ident.clone());
+			}
+		}
+
+		update_states.push((update.clone(), mutable_states));
+	}
+
+	for (name, references) in &mut function_references {
+		let is_update_function = updates.iter().any(|update| update.to_string() == *name);
+
+		if is_update_function {
+			continue;
+		}
+
+		for (update, mutable_states) in &update_states {
+			let uses_mutable_state = references.states.iter().any(|state| mutable_states.contains(state));
+			if uses_mutable_state {
+				references.callbacks.push(update.clone());
+			}
+		}
 	}
 
 	Ok(function_references)
 }
 
-pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap<String, Vec<syn::Ident>>) -> error::Result<()> {
+fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap<String, FunctionReferences>) -> error::Result<()> {
 	for statement in mem::take(&mut body.stmts) {
 		let syn::Stmt::Item(syn::Item::Fn(mut function)) = statement else {
 			body.stmts.push(statement);
@@ -362,15 +390,20 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 		};
 
 		let uninitialized_error = format!("function `{rs_name}` called before initialization");
-		let storage = quote::format_ident!("_{}_closure_{}", &rs_name, fastrand::u128(..));
+		let storage = quote::format_ident!("{}_closure_{}", &rs_name, fastrand::u128(..));
+
+		let function_references = references.get(&rs_name);
+		let states = function_references.map(|references| references.states.as_slice()).unwrap_or_default();
+		let callbacks = function_references.map(|references| references.callbacks.as_slice()).unwrap_or_default();
 
 		function.block = syn::parse_quote!({
-			#storage.with_borrow_mut(|closure| {
+			let result = #storage.with_borrow_mut(|closure| {
 				closure.as_mut().expect(#uninitialized_error)(#(#arguments),*)
-			})
+			});
+			#(#callbacks().expect("Failed to update page reference");)*
+			result
 		});
 
-		let references = references.get(&rs_name).map(Vec::as_slice).unwrap_or_default();
 		let parameters = &function.sig.inputs;
 		let output = &function.sig.output;
 
@@ -383,7 +416,7 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 			#function
 
 			{
-				#(let #references = ::core::clone::Clone::clone(&#references);)*
+				#(let #states = ::core::clone::Clone::clone(&#states);)*
 				#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
 			}
 		});

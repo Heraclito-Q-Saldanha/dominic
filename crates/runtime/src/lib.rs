@@ -8,9 +8,8 @@ use std::ops;
 use std::sync;
 
 #[derive(Debug, Clone)]
-pub struct State<T, const CALL_SIZE: usize> {
+pub struct State<T> {
 	value: sync::Arc<sync::RwLock<T>>,
-	callbacks: [fn(); CALL_SIZE],
 }
 
 pub struct StateRef<'a, T> {
@@ -18,16 +17,15 @@ pub struct StateRef<'a, T> {
 }
 
 pub struct StateRefMut<'a, T> {
-	callbacks: &'a [fn()],
-	value: Option<sync::RwLockWriteGuard<'a, T>>,
+	value: sync::RwLockWriteGuard<'a, T>,
 }
 
-impl<T, const CALL_SIZE: usize> State<T, CALL_SIZE> {
+impl<T> State<T> {
 	#[inline]
-	pub fn new(value: T, callbacks: [fn(); CALL_SIZE]) -> Self {
+	pub fn new(value: T) -> Self {
 		let value = sync::Arc::new(sync::RwLock::new(value));
 
-		Self { value, callbacks }
+		Self { value }
 	}
 
 	#[inline]
@@ -39,10 +37,9 @@ impl<T, const CALL_SIZE: usize> State<T, CALL_SIZE> {
 
 	#[inline]
 	pub fn get_mut(&self) -> StateRefMut<'_, T> {
-		let value = Some(self.value.write().unwrap());
-		let callbacks = &self.callbacks;
+		let value = self.value.write().unwrap();
 
-		StateRefMut { value, callbacks }
+		StateRefMut { value }
 	}
 }
 
@@ -60,24 +57,13 @@ impl<T> ops::Deref for StateRefMut<'_, T> {
 
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target {
-		self.value.as_deref().unwrap()
+		self.value.deref()
 	}
 }
 
 impl<T> ops::DerefMut for StateRefMut<'_, T> {
 	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target {
-		self.value.as_deref_mut().unwrap()
-	}
-}
-
-impl<T> ops::Drop for StateRefMut<'_, T> {
-	#[inline(always)]
-	fn drop(&mut self) {
-		drop(self.value.take());
-
-		for callback in self.callbacks {
-			callback();
-		}
+		self.value.deref_mut()
 	}
 }
