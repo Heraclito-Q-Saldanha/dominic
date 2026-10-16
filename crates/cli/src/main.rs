@@ -9,7 +9,7 @@ use std::env;
 use std::path;
 
 pub const DEFAULT_EXPAND_PATH: &'static str = "target";
-pub const DEFAULT_BUILD_PATH: &'static str = "dist";
+pub const DEFAULT_BUILD_PATH: &'static str = "target/dist";
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]

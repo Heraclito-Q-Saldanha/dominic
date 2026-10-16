@@ -37,7 +37,7 @@ pub fn init_project(path: &path::Path) -> error::Result<()> {
 
 	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
 	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_PAGE)?;
-	fs::write(&path.join(".gitignore"), "/target\n/dist")?;
+	fs::write(&path.join(".gitignore"), "/target\n")?;
 
 	Ok(())
 }
