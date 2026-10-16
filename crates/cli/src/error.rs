@@ -16,8 +16,10 @@ pub enum Error {
 	Notify(#[from] notify::Error),
 	#[error("Failed to generate WebAssembly bindings: {0}")]
 	Anyhow(#[from] anyhow::Error),
-	#[error("Cargo failed to compile the project;")]
+	#[error("Cargo failed to compile the project")]
 	Cargo(std::process::ExitStatus),
+	#[error("Cargo fmt failed to format the expanded project")]
+	CargoFmt(std::process::ExitStatus),
 	#[error("Invalid project file or directory path")]
 	InvalidFilePath,
 	#[error("Invalid Cargo.toml")]
