@@ -7,11 +7,18 @@ use std::path;
 pub fn expand_project(output: &path::Path) -> error::Result<()> {
 	let src_path = path::Path::new("src");
 	let routes_path = src_path.join("routes");
+	let manifest_path = output.join("Cargo.toml");
 
 	fs::create_dir_all(output.join(&routes_path))?;
-
-	fs::copy("Cargo.toml", output.join("Cargo.toml"))?;
 	fs::write(output.join(src_path.join("lib.rs")), "mod routes;")?;
+
+	let mut manifest = fs::read_to_string("Cargo.toml")?.parse::<toml_edit::DocumentMut>()?;
+
+	if !manifest.contains_key("workspace") {
+		manifest["workspace"] = toml_edit::Item::Table(toml_edit::Table::new());
+	}
+
+	fs::write(&manifest_path, manifest.to_string())?;
 
 	for path in walkdir::WalkDir::new(&routes_path) {
 		let path = path?.path().to_path_buf();

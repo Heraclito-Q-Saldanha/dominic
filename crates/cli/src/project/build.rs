@@ -11,14 +11,8 @@ pub fn build_project(output: &path::Path) -> error::Result<()> {
 
 	let manifest_path = expand_path.join("Cargo.toml");
 
-	let mut manifest = fs::read_to_string(&manifest_path)?.parse::<toml_edit::DocumentMut>()?;
+	let manifest = fs::read_to_string(&manifest_path)?.parse::<toml_edit::DocumentMut>()?;
 	let name = manifest["package"]["name"].as_str().ok_or(error::Error::InvalidManifest)?.replace('-', "_");
-
-	if !manifest.contains_key("workspace") {
-		manifest["workspace"] = toml_edit::Item::Table(toml_edit::Table::new());
-	}
-
-	fs::write(&manifest_path, manifest.to_string())?;
 
 	let status = process::Command::new("cargo")
 		.current_dir(&expand_path)
