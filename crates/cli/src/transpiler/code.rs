@@ -85,7 +85,7 @@ pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::html::HTMLTr
 				};
 
 				quote::quote!({
-					let content = if #condition { #if_body } else { #else_body };
+					let content = if #condition #if_body else #else_body;
 					::dominic_runtime::dom::update_segment(#id, &content, true)
 				})
 			}
