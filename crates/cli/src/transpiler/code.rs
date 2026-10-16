@@ -163,7 +163,11 @@ fn render_nodes(nodes: &[dominic_parser::Node<'_>]) -> error::Result<syn::Block>
 
 				if let Some(else_body) = else_body {
 					statements.push(syn::parse_quote! {
-						html.push_str(if #condition { &(#if_body) } else { &(#else_body) });
+						if #condition {
+							html.push_str(&(#if_body));
+						} else {
+							html.push_str(&(#else_body));
+						}
 					});
 				} else {
 					statements.push(syn::parse_quote! {
