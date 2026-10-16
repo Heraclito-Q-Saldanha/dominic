@@ -3,7 +3,7 @@ mod html;
 
 use crate::*;
 
-pub fn transpile(input: &str) -> error::Result<(html::HTMLTranspilerOutput, code::CodeTranspilerOutput)> {
+pub fn transpile(input: &str) -> error::Result<(html::HTMLTranspilerOutput<'_>, code::CodeTranspilerOutput)> {
 	let input = dominic_parser::parse(input).map_err(|error| error::Error::Parser(error.to_string()))?;
 	let mut code = String::new();
 

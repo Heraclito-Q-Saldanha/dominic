@@ -24,7 +24,7 @@ pub fn update_attribute(id: usize, name: &str, value: &str) -> error::Result<()>
 	Ok(())
 }
 
-pub fn update_segment(id: usize, value: &str) -> error::Result<()> {
+pub fn update_segment(id: usize, value: &str, is_html: bool) -> error::Result<()> {
 	let Some(window) = web_sys::window() else {
 		return Err(error::Error::WindowUnavailable);
 	};
@@ -51,7 +51,12 @@ pub fn update_segment(id: usize, value: &str) -> error::Result<()> {
 				range.set_start_after(start)?;
 				range.set_end_before(&marker)?;
 				range.delete_contents()?;
-				range.insert_node(&document.create_text_node(value))?;
+				if is_html {
+					let fragment = range.create_contextual_fragment(value)?;
+					range.insert_node(fragment.as_ref())?;
+				} else {
+					range.insert_node(&document.create_text_node(value))?;
+				}
 
 				return Ok(());
 			}

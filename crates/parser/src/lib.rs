@@ -25,7 +25,7 @@ pub enum Node<'source> {
 	},
 	If {
 		condition: &'source str,
-		body: Vec<Node<'source>>,
+		if_body: Vec<Node<'source>>,
 		else_body: Option<Vec<Node<'source>>>,
 	},
 	For {
@@ -96,7 +96,7 @@ fn directive(input: &str) -> Result<'_, (&str, SpannedNode<'_>)> {
 
 fn conditional(input: &str) -> Result<'_, (&str, Node<'_>)> {
 	let (input, (_, _, condition, _)) = (tag("{#if"), multispace1, verify(take_until("}"), |condition: &str| !condition.trim().is_empty()), char('}')).parse(input)?;
-	let (input, body) = nodes(input)?;
+	let (input, if_body) = nodes(input)?;
 	let (input, (_, closing)) = reference(input)?;
 
 	let (input, else_body) = match closing {
@@ -114,7 +114,7 @@ fn conditional(input: &str) -> Result<'_, (&str, Node<'_>)> {
 		input,
 		Node::If {
 			condition: condition.trim(),
-			body,
+			if_body,
 			else_body,
 		},
 	))
