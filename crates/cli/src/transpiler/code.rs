@@ -220,21 +220,20 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 
 	impl visit_mut::VisitMut for StateReferences<'_> {
 		fn visit_expr_for_loop_mut(&mut self, expression: &mut syn::ExprForLoop) {
-			let iterator = expression.expr.clone();
+			let iterator = &mut expression.expr;
 			if let syn::Expr::Path(path) = iterator.as_ref() {
 				if self.states.iter().any(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
-					expression.expr = Box::new(syn::parse_quote!(&#iterator));
+					*iterator = syn::parse_quote!(&#iterator);
 				}
 			}
 
-			self.visit_expr_mut(&mut expression.expr);
 			let binding_count = self.loop_bindings.len();
 
 			if let syn::Pat::Ident(binding) = expression.pat.as_ref() {
 				self.loop_bindings.push(binding.ident.clone());
 			}
 
-			self.visit_block_mut(&mut expression.body);
+			visit_mut::visit_expr_for_loop_mut(self, expression);
 			self.loop_bindings.truncate(binding_count);
 		}
 
