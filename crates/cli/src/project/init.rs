@@ -15,27 +15,31 @@ const DEFAULT_PAGE: &'static str = r#"<script>
 <p>{counter}</p>
 "#;
 
+const DEFAULT_CARGO_TOML: &'static str = r#"[package]
+name = "PACKAGE_NAME"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dominic-runtime = "0.1.0"
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
+"#;
+
 pub fn init_project(path: &path::Path) -> error::Result<()> {
 	let Some(name) = path.file_name() else {
 		return Err(error::Error::InvalidFilePath);
 	};
 
-	let name = name.to_string_lossy().to_string();
+	let name = name.to_string_lossy();
+	let manifest = DEFAULT_CARGO_TOML.replace("PACKAGE_NAME", &name);
 
 	fs::create_dir_all(&path.join("src").join("routes"))?;
 
-	let mut manifest = toml_edit::DocumentMut::new();
-
-	manifest["package"] = toml_edit::Item::Table(toml_edit::Table::new());
-
-	manifest["package"]["name"] = toml_edit::value(name);
-	manifest["package"]["version"] = toml_edit::value("0.1.0");
-	manifest["package"]["edition"] = toml_edit::value("2024");
-
-	manifest["dependencies"] = toml_edit::Item::Table(toml_edit::Table::default());
-	manifest["dependencies"]["dominic-runtime"] = toml_edit::value("0.1.0");
-
-	fs::write(&path.join("Cargo.toml"), manifest.to_string())?;
+	fs::write(&path.join("Cargo.toml"), manifest)?;
 	fs::write(&path.join("src").join("routes").join("+page.minic"), DEFAULT_PAGE)?;
 	fs::write(&path.join(".gitignore"), "/target\n")?;
 
