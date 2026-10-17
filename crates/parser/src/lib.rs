@@ -86,7 +86,13 @@ fn block<'source>(opening: &'static str, closing: &'static str) -> impl Parser<&
 }
 
 fn reference(input: &str) -> Result<'_, (&str, (&str, &str))> {
-	consumed(block("{", "}")).parse(input)
+	let source = input;
+	let (input, _) = char('{').parse(input)?;
+	let (input, (code, _)) = cut(consumed(nom::multi::many_till(rust_fragment, peek(char('}'))))).parse(input)?;
+	let (input, _) = cut(char('}')).parse(input)?;
+	let span = &source[..source.len() - input.len()];
+
+	Ok((input, (span, code.trim())))
 }
 
 fn directive(input: &str) -> Result<'_, (&str, SpannedNode<'_>)> {
