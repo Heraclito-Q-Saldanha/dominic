@@ -451,9 +451,10 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 	let code = quote::quote! {
 		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen)]
 		pub fn #init_fn() #body
-	}
-	.to_string();
+	};
 
+	let ast = syn::parse2(code)?;
+	let code = prettyplease::unparse(&ast);
 	let init_fn = init_fn.to_string();
 
 	Ok(CodeTranspilerOutput { code, init_fn })

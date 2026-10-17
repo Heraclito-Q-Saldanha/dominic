@@ -3,7 +3,6 @@ use crate::*;
 use std::fs;
 use std::io;
 use std::path;
-use std::process;
 
 pub fn expand_project(output: &path::Path) -> error::Result<()> {
 	let src_path = path::Path::new("src");
@@ -87,12 +86,6 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 
 		io::Write::write_all(&mut module, code.as_bytes())?;
 		io::Write::write_all(&mut module, b"\n")?;
-	}
-
-	let status = process::Command::new("cargo").current_dir(output).arg("fmt").status()?;
-
-	if !status.success() {
-		return Err(error::Error::CargoFmt(status));
 	}
 
 	Ok(())

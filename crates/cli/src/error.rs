@@ -18,8 +18,6 @@ pub enum Error {
 	Anyhow(#[from] anyhow::Error),
 	#[error("Cargo failed to compile the project")]
 	Cargo(std::process::ExitStatus),
-	#[error("Cargo fmt failed to format the expanded project")]
-	CargoFmt(std::process::ExitStatus),
 	#[error("Invalid project file or directory path")]
 	InvalidFilePath,
 	#[error("Invalid Cargo.toml")]
