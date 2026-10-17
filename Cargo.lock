@@ -146,6 +146,7 @@ dependencies = [
  "log",
  "notify",
  "prettyplease",
+ "proc-macro2",
  "quote",
  "simple_logger",
  "syn 3.0.7",

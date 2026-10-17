@@ -359,10 +359,17 @@ fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error::Res
 	Ok(function_references)
 }
 
-fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap<String, FunctionReferences>) -> error::Result<()> {
+fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap<String, FunctionReferences>) -> error::Result<proc_macro2::TokenStream> {
+	let mut globals = quote::quote! {};
+	let mut thread_locals = quote::quote! {};
+	let mut initialization = quote::quote! {};
+
 	for statement in mem::take(&mut body.stmts) {
 		let syn::Stmt::Item(syn::Item::Fn(mut function)) = statement else {
-			body.stmts.push(statement);
+			initialization = quote::quote! {
+				#initialization
+				#statement
+			};
 			continue;
 		};
 
@@ -407,24 +414,37 @@ fn transpile_functions(body: &mut syn::Block, references: &collections::BTreeMap
 		let parameters = &function.sig.inputs;
 		let output = &function.sig.output;
 
-		let replacement: syn::Block = syn::parse_quote!({
-			::std::thread_local! {
-				#[allow(non_upper_case_globals)]
-				static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> = const { ::std::cell::RefCell::new(::core::option::Option::None) };
-			}
+		thread_locals = syn::parse_quote! {
+			#[allow(non_upper_case_globals)]
+			static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> = const { ::std::cell::RefCell::new(::core::option::Option::None) };
 
-			#function
+			#thread_locals
+		};
 
+		initialization = quote::quote! {
+			#initialization
 			{
 				#(let #states = ::core::clone::Clone::clone(&#states);)*
 				#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
 			}
-		});
+		};
 
-		body.stmts.extend(replacement.stmts);
+		globals = quote::quote! {
+			#function
+			#globals
+		};
 	}
 
-	Ok(())
+	globals = quote::quote! {
+		::std::thread_local! {
+			#thread_locals
+		}
+		#globals
+	};
+
+	body.stmts = syn::parse_quote! {#initialization};
+
+	Ok(globals)
 }
 
 pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {
@@ -432,15 +452,16 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 
 	let updates = transpile_segments(&mut body, html)?;
 	let references = transpile_states(&mut body, &updates)?;
-	transpile_functions(&mut body, &references)?;
+	let mut globals = transpile_functions(&mut body, &references)?;
 
-	body.stmts.push(syn::parse_quote! {
+	globals = quote::quote! {
+		#globals
 		fn _init_segments() -> ::dominic_runtime::error::Result<()> {
 			#(#updates()?;)*
 
 			Ok(())
 		}
-	});
+	};
 
 	body.stmts.push(syn::parse_quote! {
 		_init_segments().expect("Failed to initialize page segments");
@@ -449,6 +470,7 @@ pub fn transpile_code(code: &str, html: &transpiler::html::HTMLTranspilerOutput)
 	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
 
 	let code = quote::quote! {
+		#globals
 		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen)]
 		pub fn #init_fn() #body
 	};
