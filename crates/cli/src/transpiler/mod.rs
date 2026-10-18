@@ -58,7 +58,7 @@ fn transpile_code(code: &str, html: &HTMLTranspilerOutput) -> error::Result<Code
 	let code = quote::quote! {
 		#globals
 		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, wasm_bindgen_futures = dominic_runtime::wasm_bindgen_futures)]
-		pub fn #init_fn() #body
+		pub async fn #init_fn() #body
 	};
 
 	let ast = syn::parse2(code)?;
