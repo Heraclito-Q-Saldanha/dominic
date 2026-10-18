@@ -1,37 +1,38 @@
+use std::cell;
 use std::ops;
-use std::sync;
+use std::rc;
 
 #[derive(Debug, Clone)]
 pub struct State<T> {
-	value: sync::Arc<sync::RwLock<T>>,
+	value: rc::Rc<cell::RefCell<T>>,
 }
 
 pub struct StateRef<'a, T> {
-	value: sync::RwLockReadGuard<'a, T>,
+	value: cell::Ref<'a, T>,
 }
 
 pub struct StateRefMut<'a, T> {
-	value: sync::RwLockWriteGuard<'a, T>,
+	value: cell::RefMut<'a, T>,
 }
 
 impl<T> State<T> {
 	#[inline]
 	pub fn new(value: T) -> Self {
-		let value = sync::Arc::new(sync::RwLock::new(value));
+		let value = rc::Rc::new(cell::RefCell::new(value));
 
 		Self { value }
 	}
 
 	#[inline]
 	pub fn get(&self) -> StateRef<'_, T> {
-		let value = self.value.read().unwrap();
+		let value = self.value.borrow();
 
 		StateRef { value }
 	}
 
 	#[inline]
 	pub fn get_mut(&self) -> StateRefMut<'_, T> {
-		let value = self.value.write().unwrap();
+		let value = self.value.borrow_mut();
 
 		StateRefMut { value }
 	}
