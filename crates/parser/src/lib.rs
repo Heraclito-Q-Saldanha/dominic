@@ -4,7 +4,7 @@ use nom::character::complete::*;
 use nom::combinator::*;
 
 pub type Error<'a> = nom::Err<nom::error::Error<&'a str>>;
-pub type Result<'a, T, E = Error<'a>> = ::core::result::Result<T, E>;
+pub type Result<'a, T, E = Error<'a>> = core::result::Result<T, E>;
 
 type SpannedNode<'source> = (&'source str, Node<'source>);
 
