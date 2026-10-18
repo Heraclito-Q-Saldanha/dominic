@@ -286,7 +286,11 @@ fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error::Res
 		let value = invocation.mac.parse_body::<syn::Expr>()?;
 		let attributes = &invocation.attrs;
 		let pattern = match &mut local.pat {
-			syn::Pat::Type(pattern) => pattern.pat.as_mut(),
+			syn::Pat::Type(pattern) => {
+				let value_type = pattern.ty.clone();
+				pattern.ty = Box::new(syn::parse_quote!(::dominic_runtime::state::State<#value_type>));
+				pattern.pat.as_mut()
+			}
 			pattern => pattern,
 		};
 		let syn::Pat::Ident(binding) = pattern else {
