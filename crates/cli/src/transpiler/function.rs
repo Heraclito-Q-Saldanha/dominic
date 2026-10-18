@@ -52,31 +52,68 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 		let states = function_references.map(|references| references.states.as_slice()).unwrap_or_default();
 		let callbacks = function_references.map(|references| references.callbacks.as_slice()).unwrap_or_default();
 
-		function.block = syn::parse_quote!({
-			let result = #storage.with_borrow_mut(|closure| {
-				closure.as_mut().expect(#uninitialized_error)(#(#arguments),*)
-			});
-			#(#callbacks().expect("Failed to update page reference");)*
-			result
-		});
-
+		let is_async = function.sig.asyncness.is_some();
 		let parameters = &function.sig.inputs;
 		let output = &function.sig.output;
 
-		thread_locals = syn::parse_quote! {
-			#[allow(non_upper_case_globals)]
-			static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> = const { ::std::cell::RefCell::new(::core::option::Option::None) };
+		match is_async {
+			true => {
+				function.block = syn::parse_quote!({
+					let result = #storage.with_borrow_mut(|closure| {
+						closure.as_mut().expect(#uninitialized_error)(#(#arguments),*)
+					}).await;
+					#(#callbacks().expect("Failed to update page reference");)*
+					result
+				});
 
-			#thread_locals
-		};
+				let return_type = match output {
+					syn::ReturnType::Default => quote::quote!(()),
+					syn::ReturnType::Type(_, return_type) => quote::quote!(#return_type),
+				};
 
-		initialization = quote::quote! {
-			#initialization
-			{
-				#(let #states = ::core::clone::Clone::clone(&#states);)*
-				#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
+				thread_locals = quote::quote! {
+					#[allow(non_upper_case_globals)]
+					static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) -> ::core::pin::Pin<::std::boxed::Box<dyn ::core::future::Future<Output = #return_type>>>>>> = const { ::std::cell::RefCell::new(::core::option::Option::None) };
+
+					#thread_locals
+				};
+
+				initialization = quote::quote! {
+					#initialization
+					{
+						#(let #states = ::core::clone::Clone::clone(&#states);)*
+						#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| {
+							#(let #states = ::core::clone::Clone::clone(&#states);)*
+							::std::boxed::Box::pin(async move #closure_body)
+						})));
+					}
+				};
 			}
-		};
+			false => {
+				function.block = syn::parse_quote!({
+					let result = #storage.with_borrow_mut(|closure| {
+						closure.as_mut().expect(#uninitialized_error)(#(#arguments),*)
+					});
+					#(#callbacks().expect("Failed to update page reference");)*
+					result
+				});
+
+				thread_locals = quote::quote! {
+					#[allow(non_upper_case_globals)]
+					static #storage: ::std::cell::RefCell<::core::option::Option<::std::boxed::Box<dyn ::std::ops::FnMut(#(#types),*) #output>>> = const { ::std::cell::RefCell::new(::core::option::Option::None) };
+
+					#thread_locals
+				};
+
+				initialization = quote::quote! {
+					#initialization
+					{
+						#(let #states = ::core::clone::Clone::clone(&#states);)*
+						#storage.set(::core::option::Option::Some(::std::boxed::Box::new(move |#parameters| #output #closure_body)));
+					}
+				};
+			}
+		}
 
 		globals = quote::quote! {
 			#function
