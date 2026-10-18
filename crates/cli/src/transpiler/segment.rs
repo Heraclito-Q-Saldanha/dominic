@@ -25,7 +25,7 @@ pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::HTMLTranspil
 						let block = &closure.body;
 
 						body.stmts.push(syn::parse2(quote::quote! {
-							#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, js_name = #export)]
+							#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, wasm_bindgen_futures = dominic_runtime::wasm_bindgen_futures, js_name = #export)]
 							pub fn #name(#inputs) #output { #block }
 						})?);
 
@@ -48,7 +48,7 @@ pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::HTMLTranspil
 
 									function.vis = syn::parse_quote!(pub);
 									function.attrs.push(syn::parse_quote! {
-										#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, js_name = #name)]
+										#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, wasm_bindgen_futures = dominic_runtime::wasm_bindgen_futures, js_name = #name)]
 									});
 
 									name
