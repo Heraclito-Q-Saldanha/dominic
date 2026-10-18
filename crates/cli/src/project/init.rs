@@ -21,7 +21,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-dominic-runtime = "0.1.0"
+dominic-runtime = { git = "https://github.com/Heraclito-Q-Saldanha/dominic/" }
 
 [profile.release]
 opt-level = "z"
