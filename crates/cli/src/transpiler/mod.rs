@@ -53,17 +53,16 @@ fn transpile_code(code: &str, html: &HTMLTranspilerOutput) -> error::Result<Code
 		_init_segments().expect("Failed to initialize page segments");
 	});
 
-	let init_fn = quote::format_ident!("_init_{:032x}", fastrand::u128(..));
+	let init_fn = format!("_init_page_{:032x}", fastrand::u128(..));
 
 	let code = quote::quote! {
 		#globals
-		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, wasm_bindgen_futures = dominic_runtime::wasm_bindgen_futures)]
-		pub async fn #init_fn() #body
+		#[dominic_runtime::bindgen(wasm_bindgen = dominic_runtime::wasm_bindgen, wasm_bindgen_futures = dominic_runtime::wasm_bindgen_futures, js_name=#init_fn)]
+		pub async fn _init_page() #body
 	};
 
 	let ast = syn::parse2(code)?;
 	let code = prettyplease::unparse(&ast);
-	let init_fn = init_fn.to_string();
 
 	Ok(CodeTranspilerOutput { code, init_fn })
 }
