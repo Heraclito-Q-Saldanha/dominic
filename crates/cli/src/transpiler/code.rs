@@ -298,7 +298,7 @@ fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error::Res
 			is_mutable: binding.mutability.take().is_some(),
 		});
 
-		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::State::new(#value));
+		init.expr = syn::parse_quote!(#(#attributes)* ::dominic_runtime::state::State::new(#value));
 	}
 
 	let mut function_references = collections::BTreeMap::new();
