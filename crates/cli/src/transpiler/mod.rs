@@ -37,7 +37,8 @@ fn transpile_code(code: &str, html: &HTMLTranspilerOutput) -> error::Result<Code
 	let mut body = syn::parse_str::<syn::Block>(&format!("{{{code}}}"))?;
 
 	let updates = segment::transpile_segments(&mut body, html)?;
-	let references = state::transpile_states(&mut body, &updates)?;
+	let states = state::declarations::transpile_declarations(&mut body)?;
+	let references = state::references::transpile_references(&mut body, &states, &updates);
 	let mut globals = function::transpile_functions(&mut body, &references)?;
 
 	globals = quote::quote! {
