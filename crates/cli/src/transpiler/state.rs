@@ -12,13 +12,23 @@ struct StateDeclaration {
 struct StateReferences<'a> {
 	states: &'a [StateDeclaration],
 	references: Vec<syn::Ident>,
+	shadowed: Vec<syn::Ident>,
 	read_only: bool,
 }
 
 impl visit_mut::VisitMut for StateReferences<'_> {
+	fn visit_pat_ident_mut(&mut self, pattern: &mut syn::PatIdent) {
+		self.shadowed.push(pattern.ident.clone());
+		visit_mut::visit_pat_ident_mut(self, pattern);
+	}
+
 	fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
 		if let syn::Expr::Path(path) = expression {
-			if let Some(state) = self.states.iter().find(|state| path.qself.is_none() && path.path.is_ident(&state.ident)) {
+			if let Some(state) = self
+				.states
+				.iter()
+				.find(|state| path.qself.is_none() && path.path.is_ident(&state.ident) && !self.shadowed.contains(&state.ident))
+			{
 				if !self.references.contains(&state.ident) {
 					self.references.push(state.ident.clone());
 				}
@@ -37,6 +47,84 @@ impl visit_mut::VisitMut for StateReferences<'_> {
 		}
 
 		syn::visit_mut::visit_expr_mut(self, expression);
+	}
+
+	fn visit_block_mut(&mut self, block: &mut syn::Block) {
+		let scope_start = self.shadowed.len();
+
+		for statement in &mut block.stmts {
+			self.visit_stmt_mut(statement);
+		}
+
+		self.shadowed.truncate(scope_start);
+	}
+
+	fn visit_local_mut(&mut self, local: &mut syn::Local) {
+		self.visit_attributes_mut(&mut local.attrs);
+		if let Some(init) = &mut local.init {
+			self.visit_local_init_mut(init);
+		}
+		self.visit_pat_mut(&mut local.pat);
+	}
+
+	fn visit_item_fn_mut(&mut self, function: &mut syn::ItemFn) {
+		let outer_scope = std::mem::take(&mut self.shadowed);
+		visit_mut::visit_item_fn_mut(self, function);
+		self.shadowed = outer_scope;
+	}
+
+	fn visit_expr_closure_mut(&mut self, closure: &mut syn::ExprClosure) {
+		let scope_start = self.shadowed.len();
+		visit_mut::visit_expr_closure_mut(self, closure);
+		self.shadowed.truncate(scope_start);
+	}
+
+	fn visit_expr_if_mut(&mut self, expression: &mut syn::ExprIf) {
+		let scope_start = self.shadowed.len();
+
+		if let syn::Expr::Let(condition) = expression.cond.as_mut() {
+			self.visit_expr_mut(condition.expr.as_mut());
+			self.visit_pat_mut(condition.pat.as_mut());
+		} else {
+			self.visit_expr_mut(expression.cond.as_mut());
+		}
+
+		self.visit_block_mut(&mut expression.then_branch);
+		self.shadowed.truncate(scope_start);
+
+		if let Some((_, else_branch)) = &mut expression.else_branch {
+			self.visit_expr_mut(else_branch);
+		}
+	}
+
+	fn visit_expr_while_mut(&mut self, expression: &mut syn::ExprWhile) {
+		let scope_start = self.shadowed.len();
+
+		if let syn::Expr::Let(condition) = expression.cond.as_mut() {
+			self.visit_expr_mut(condition.expr.as_mut());
+			self.visit_pat_mut(condition.pat.as_mut());
+		} else {
+			self.visit_expr_mut(expression.cond.as_mut());
+		}
+
+		self.visit_block_mut(&mut expression.body);
+		self.shadowed.truncate(scope_start);
+	}
+
+	fn visit_expr_for_loop_mut(&mut self, expression: &mut syn::ExprForLoop) {
+		self.visit_expr_mut(expression.expr.as_mut());
+
+		let scope_start = self.shadowed.len();
+		self.visit_pat_mut(expression.pat.as_mut());
+		self.visit_block_mut(&mut expression.body);
+		self.shadowed.truncate(scope_start);
+	}
+
+	fn visit_arm_mut(&mut self, arm: &mut syn::Arm) {
+		let scope_start = self.shadowed.len();
+		self.visit_pat_mut(&mut arm.pat);
+		self.visit_expr_mut(&mut arm.body);
+		self.shadowed.truncate(scope_start);
 	}
 
 	fn visit_field_value_mut(&mut self, field: &mut syn::FieldValue) {
@@ -107,18 +195,19 @@ pub fn transpile_states(body: &mut syn::Block, updates: &[syn::Ident]) -> error:
 			states: &states,
 			references: Vec::new(),
 			read_only: matches!(statement, syn::Stmt::Item(syn::Item::Fn(function)) if updates.contains(&function.sig.ident)),
+			shadowed: Vec::new(),
 		};
 
 		visit_mut::VisitMut::visit_stmt_mut(&mut visitor, statement);
 
 		if let syn::Stmt::Item(syn::Item::Fn(function)) = statement {
-			function_references.insert(
-				function.sig.ident.to_string(),
-				transpiler::function::FunctionReferences {
-					states: visitor.references,
-					callbacks: Vec::new(),
-				},
-			);
+			let ident = function.sig.ident.to_string();
+			let references = transpiler::function::FunctionReferences {
+				states: visitor.references,
+				callbacks: Vec::new(),
+			};
+
+			function_references.insert(ident, references);
 		}
 	}
 
