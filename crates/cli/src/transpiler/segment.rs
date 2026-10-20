@@ -70,9 +70,9 @@ pub fn transpile_segments(body: &mut syn::Block, html: &transpiler::HTMLTranspil
 
 				quote::quote!(::dominic_runtime::dom::update_segment(#id, &::std::format!("{}", #expression), false))
 			}
-			dominic_parser::Node::If { condition, if_body: nodes, else_body } => {
+			dominic_parser::Node::If { condition, if_body, else_body } => {
 				let condition = syn::parse_str::<syn::Expr>(condition)?;
-				let if_body = render_nodes(nodes)?;
+				let if_body = render_nodes(if_body)?;
 				let else_body = match else_body {
 					Some(nodes) => render_nodes(nodes)?,
 					None => syn::parse_quote!({ ::std::string::String::new() }),
