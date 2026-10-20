@@ -8,7 +8,7 @@ use std::collections;
 
 pub struct HTMLTranspilerOutput<'source> {
 	pub html: String,
-	pub references: collections::BTreeMap<usize, dominic_parser::Node<'source>>,
+	pub references: collections::BTreeMap<u128, dominic_parser::Node<'source>>,
 }
 
 pub struct CodeTranspilerOutput {
@@ -76,7 +76,7 @@ pub fn transpile_html<'source>(input: &dominic_parser::Code<'source>) -> HTMLTra
 		match node {
 			dominic_parser::Node::Static(content) => html.push_str(content),
 			dominic_parser::Node::AttributeReference { name, .. } => {
-				let id = references.len();
+				let id = fastrand::u128(..);
 				let start = html.trim_end().strip_suffix('=').unwrap().trim_end().len() - name.len();
 
 				html.truncate(start);
@@ -85,20 +85,20 @@ pub fn transpile_html<'source>(input: &dominic_parser::Code<'source>) -> HTMLTra
 				references.insert(id, node.clone());
 			}
 			dominic_parser::Node::CodeReference(_) => {
-				let id = references.len();
+				let id = fastrand::u128(..);
 
 				html.push_str(&format!("<!--dominic:{id}--><!--/dominic:{id}-->"));
 
 				references.insert(id, node.clone());
 			}
 			dominic_parser::Node::If { .. } => {
-				let id = references.len();
+				let id = fastrand::u128(..);
 
 				html.push_str(&format!("<!--dominic:{id}--><!--/dominic:{id}-->"));
 				references.insert(id, node.clone());
 			}
 			dominic_parser::Node::For { .. } => {
-				let id = references.len();
+				let id = fastrand::u128(..);
 
 				html.push_str(&format!("<!--dominic:{id}--><!--/dominic:{id}-->"));
 				references.insert(id, node.clone());

@@ -2,7 +2,7 @@ use crate::*;
 
 const SHOW_COMMENT: u32 = 0x80;
 
-pub fn update_attribute(id: usize, name: &str, value: &str) -> error::Result<()> {
+pub fn update_attribute(id: u128, name: &str, value: &str) -> error::Result<()> {
 	let Some(window) = web_sys::window() else {
 		return Err(error::Error::WindowUnavailable);
 	};
@@ -24,7 +24,7 @@ pub fn update_attribute(id: usize, name: &str, value: &str) -> error::Result<()>
 	Ok(())
 }
 
-pub fn update_segment(id: usize, value: &str, is_html: bool) -> error::Result<()> {
+pub fn update_segment(id: u128, value: &str, is_html: bool) -> error::Result<()> {
 	let Some(window) = web_sys::window() else {
 		return Err(error::Error::WindowUnavailable);
 	};

@@ -46,7 +46,7 @@ pub fn transpile_functions(body: &mut syn::Block, references: &collections::BTre
 		};
 
 		let uninitialized_error = format!("function `{rs_name}` called before initialization");
-		let storage = quote::format_ident!("{}_closure_{}", &rs_name, fastrand::u128(..));
+		let storage = quote::format_ident!("_{}_closure", &rs_name);
 
 		let function_references = references.get(&rs_name);
 		let states = function_references.map(|references| references.states.as_slice()).unwrap_or_default();
