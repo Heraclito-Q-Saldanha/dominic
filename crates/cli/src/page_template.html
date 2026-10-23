@@ -1,0 +1,23 @@
+<html>
+	<head>
+		<meta charset="UTF-8">
+	</head>
+	<body>
+		<script type="module">
+			import * as script from "/index.js";
+
+			const start = async () => {
+				await script.default({ module_or_path: "/index_bg.wasm" });
+				window._dominic_ = script;
+				window._dominic_.{PAGE_ENTRY_POINT}();
+			};
+
+			if (document.readyState === "complete") {
+				start();
+			} else {
+				window.addEventListener("load", start, { once: true });
+			}
+		</script>
+		{PAGE_BODY}
+	</body>
+</html>

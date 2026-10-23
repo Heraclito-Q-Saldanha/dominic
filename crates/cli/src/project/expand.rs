@@ -4,13 +4,15 @@ use std::fs;
 use std::io;
 use std::path;
 
+const PAGE_TEMPLATE: &'static str = include_str!("../page_template.html");
+
 pub fn expand_project(output: &path::Path) -> error::Result<()> {
 	let src_path = path::Path::new("src");
 	let routes_path = src_path.join("routes");
 	let manifest_path = output.join("Cargo.toml");
 
 	fs::create_dir_all(output.join(&routes_path))?;
-	fs::write(output.join(src_path.join("lib.rs")), "mod routes;")?;
+	fs::File::create(output.join(src_path.join("lib.rs")))?;
 
 	let mut manifest = fs::read_to_string("Cargo.toml")?.parse::<toml_edit::DocumentMut>()?;
 
@@ -20,8 +22,12 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 
 	fs::write(&manifest_path, manifest.to_string())?;
 
-	for path in walkdir::WalkDir::new(&routes_path) {
+	for path in walkdir::WalkDir::new(&src_path) {
 		let path = path?.path().to_path_buf();
+
+		if path == src_path {
+			continue;
+		}
 
 		let Some(name) = path.file_name() else {
 			continue;
@@ -35,10 +41,6 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 			fs::create_dir_all(output.join(&path))?;
 			fs::File::create(output.join(&path).join("mod.rs"))?;
 
-			if parent == src_path {
-				continue;
-			}
-
 			format!("mod {};", name.to_string_lossy())
 		} else {
 			if name != "+page.minic" {
@@ -49,40 +51,15 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 
 			let (html, code) = transpiler::transpile(&input)?;
 
-			let content = format!(
-				r#"<!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8">
-	</head>
-	<body>
-		<script type="module">
-			import * as script from "/index.js";
-
-			const start = async () => {{
-				await script.default({{ module_or_path: "/index_bg.wasm" }});
-				window._dominic_ = script;
-				window._dominic_.{}();
-			}};
-			if (document.readyState === "complete") {{
-				start();
-			}} else {{
-				window.addEventListener("load", start, {{ once: true }});
-			}}
-		</script>
-		{}
-	</body>
-</html>
-"#,
-				code.init_fn, html.html
-			);
+			let content = PAGE_TEMPLATE.replace("{PAGE_ENTRY_POINT}", &code.init_fn).replace("{PAGE_BODY}", &html.html);
 
 			fs::write(output.join(&parent).join("index.html"), content)?;
 
 			code.code
 		};
 
-		let mut module = fs::OpenOptions::new().append(true).open(output.join(parent).join("mod.rs"))?;
+		let module_file = if parent == src_path { "lib.rs" } else { "mod.rs" };
+		let mut module = fs::OpenOptions::new().append(true).open(output.join(parent).join(module_file))?;
 
 		io::Write::write_all(&mut module, code.as_bytes())?;
 		io::Write::write_all(&mut module, b"\n")?;
