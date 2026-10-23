@@ -15,6 +15,12 @@ pub struct Code<'source> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComponentProp<'source> {
+	pub name: &'source str,
+	pub value: &'source str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Node<'source> {
 	Script(&'source str),
 	Style(&'source str),
@@ -33,25 +39,35 @@ pub enum Node<'source> {
 		items: &'source str,
 		body: Vec<Node<'source>>,
 	},
+	Component {
+		name: &'source str,
+		props: Vec<ComponentProp<'source>>,
+		children: Vec<Node<'source>>,
+	},
 	Static(&'source str),
 }
 
 pub fn parse(source: &str) -> Result<'_, Code<'_>> {
-	let (_, nodes) = all_consuming(nodes).parse(source)?;
+	let (_, nodes) = all_consuming(|source| nodes(source, None)).parse(source)?;
 
 	Ok(Code { source, nodes })
 }
 
-fn nodes(source: &str) -> Result<'_, (&str, Vec<Node<'_>>)> {
+fn nodes_end(input: &str, component_name: Option<&str>) -> bool {
+	input.starts_with("{:") || input.starts_with("{/") || component_name.is_some_and(|name| component_end(input, name).is_ok())
+}
+
+fn nodes<'source>(source: &'source str, component_name: Option<&str>) -> Result<'source, (&'source str, Vec<Node<'source>>)> {
 	let mut input = source;
 	let mut nodes = Vec::new();
 	let mut cursor = 0;
 
-	while !input.is_empty() && !input.starts_with("{:") && !input.starts_with("{/") {
+	while !input.is_empty() && !nodes_end(input, component_name) {
 		let (rest, parsed) = nom::branch::alt((
 			consumed(block("<script>", "</script>")).map(|(span, code)| vec![(span, Node::Script(code))]),
 			consumed(block("<style>", "</style>")).map(|(span, code)| vec![(span, Node::Style(code))]),
 			block("<!--", "-->").map(|_| Vec::new()),
+			consumed(component).map(|(span, node)| vec![(span, node)]),
 			element,
 			directive.map(|node| vec![node]),
 			reference.map(|(span, code)| vec![(span, Node::CodeReference(code))]),
@@ -102,13 +118,13 @@ fn directive(input: &str) -> Result<'_, (&str, SpannedNode<'_>)> {
 
 fn conditional(input: &str) -> Result<'_, (&str, Node<'_>)> {
 	let (input, (_, _, condition, _)) = (tag("{#if"), multispace1, verify(take_until("}"), |condition: &str| !condition.trim().is_empty()), char('}')).parse(input)?;
-	let (input, if_body) = nodes(input)?;
+	let (input, if_body) = nodes(input, None)?;
 	let (input, (_, closing)) = reference(input)?;
 
 	let (input, else_body) = match closing {
 		"/if" => (input, None),
 		":else" => {
-			let (input, body) = nodes(input)?;
+			let (input, body) = nodes(input, None)?;
 			let (input, _) = verify(reference, |(_, closing)| *closing == "/if").parse(input)?;
 
 			(input, Some(body))
@@ -137,7 +153,7 @@ fn for_loop(input: &str) -> Result<'_, (&str, Node<'_>)> {
 		return Err(nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
 	}
 
-	let (input, body) = nodes(input)?;
+	let (input, body) = nodes(input, None)?;
 	let (input, _) = verify(reference, |(_, closing)| *closing == "/for").parse(input)?;
 
 	Ok((input, Node::For { pattern, items, body }))
@@ -157,6 +173,40 @@ fn rust_fragment(input: &str) -> Result<'_, (&str, &str)> {
 		recognize(satisfy(|c| !matches!(c, '(' | ')' | '[' | ']' | '{' | '}' | '"'))),
 	))
 	.parse(input)
+}
+
+fn component(input: &str) -> Result<'_, (&str, Node<'_>)> {
+	let (input, _) = char('<').parse(input)?;
+	let (input, name) = recognize((
+		satisfy(|character| character.is_ascii_uppercase()),
+		take_while(|character: char| character.is_ascii_alphanumeric() || character == '_'),
+	))
+	.parse(input)?;
+	let (input, props) = cut(nom::multi::many0(nom::sequence::preceded(multispace1, component_prop))).parse(input)?;
+	let (input, (_, self_closing, _)) = cut((multispace0, opt(char('/')), char('>'))).parse(input)?;
+	let (input, children) = if self_closing.is_some() {
+		(input, Vec::new())
+	} else {
+		let (input, children) = nodes(input, Some(name))?;
+		let (input, _) = component_end(input, name)?;
+		(input, children)
+	};
+
+	Ok((input, Node::Component { name, props, children }))
+}
+
+fn component_end<'source>(input: &'source str, name: &str) -> Result<'source, (&'source str, ())> {
+	let (input, _) = (tag("</"), tag(name), multispace0, char('>')).parse(input)?;
+
+	Ok((input, ()))
+}
+
+fn component_prop(input: &str) -> Result<'_, (&str, ComponentProp<'_>)> {
+	let (input, name) = take_while1(|character: char| character.is_ascii_alphanumeric() || character == '_').parse(input)?;
+	let (input, _) = (multispace0, char('='), multispace0).parse(input)?;
+	let (input, (_, value)) = reference(input)?;
+
+	Ok((input, ComponentProp { name, value }))
 }
 
 fn element(input: &str) -> Result<'_, (&str, Vec<SpannedNode<'_>>)> {
