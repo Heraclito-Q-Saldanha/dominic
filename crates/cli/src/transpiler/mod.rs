@@ -16,7 +16,7 @@ pub struct CodeTranspilerOutput {
 	pub init_fn: String,
 }
 
-pub fn transpile(input: &str) -> error::Result<(HTMLTranspilerOutput<'_>, CodeTranspilerOutput)> {
+pub fn transpile_page(input: &str) -> error::Result<(HTMLTranspilerOutput<'_>, CodeTranspilerOutput)> {
 	let input = dominic_parser::parse(input).map_err(|error| error::Error::Parser(error.to_string()))?;
 	let mut code = String::new();
 
@@ -31,6 +31,25 @@ pub fn transpile(input: &str) -> error::Result<(HTMLTranspilerOutput<'_>, CodeTr
 	let code_output = transpile_code(&code, &html_output)?;
 
 	Ok((html_output, code_output))
+}
+
+pub fn transpile_component(_input: &str) -> error::Result<String> {
+	let code = quote::quote! {
+		pub struct Args {}
+
+		pub fn _init_component() {
+
+		}
+
+		pub fn _render_component() {
+
+		}
+	};
+
+	let ast = syn::parse2(code)?;
+	let code = prettyplease::unparse(&ast);
+
+	Ok(code)
 }
 
 fn transpile_code(code: &str, html: &HTMLTranspilerOutput) -> error::Result<CodeTranspilerOutput> {

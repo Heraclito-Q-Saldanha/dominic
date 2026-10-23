@@ -48,26 +48,28 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 			fs::create_dir_all(output.join(&path))?;
 			fs::File::create(output.join(&path).join("mod.rs"))?;
 
-			let code = format!("mod {};", name.to_string_lossy());
+			let code = format!("pub mod {};", name.to_string_lossy());
 
 			io::Write::write_all(&mut code_file, code.as_bytes())?;
 			io::Write::write_all(&mut code_file, b"\n")?;
 		} else {
-			if name != "+page.minic" {
-				continue;
-			}
-
 			let input = fs::read_to_string(&path)?;
 
-			let (html, code) = transpiler::transpile(&input)?;
+			if name == "+page.minic" {
+				let (html, code) = transpiler::transpile_page(&input)?;
 
-			let code_content = code.code;
-			let html_content = PAGE_TEMPLATE.replace("{PAGE_ENTRY_POINT}", &code.init_fn).replace("{PAGE_BODY}", &html.html);
+				let code_content = code.code;
+				let html_content = PAGE_TEMPLATE.replace("{PAGE_ENTRY_POINT}", &code.init_fn).replace("{PAGE_BODY}", &html.html);
 
-			let mut html_file = fs::File::create(html_path)?;
+				let mut html_file = fs::File::create(html_path)?;
 
-			io::Write::write_all(&mut html_file, html_content.as_bytes())?;
-			io::Write::write_all(&mut code_file, code_content.as_bytes())?;
+				io::Write::write_all(&mut html_file, html_content.as_bytes())?;
+				io::Write::write_all(&mut code_file, code_content.as_bytes())?;
+			} else {
+				let code_content = transpiler::transpile_component(&input)?;
+
+				io::Write::write_all(&mut code_file, code_content.as_bytes())?;
+			}
 		};
 	}
 
