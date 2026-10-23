@@ -37,11 +37,21 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 			continue;
 		};
 
-		let code = if path.is_dir() {
+		let code_file_name = if parent == src_path { "lib.rs" } else { "mod.rs" };
+
+		let code_path = output.join(&parent).join(code_file_name);
+		let html_path = output.join(&parent).join("index.html");
+
+		let mut code_file = fs::OpenOptions::new().append(true).open(code_path)?;
+
+		if path.is_dir() {
 			fs::create_dir_all(output.join(&path))?;
 			fs::File::create(output.join(&path).join("mod.rs"))?;
 
-			format!("mod {};", name.to_string_lossy())
+			let code = format!("mod {};", name.to_string_lossy());
+
+			io::Write::write_all(&mut code_file, code.as_bytes())?;
+			io::Write::write_all(&mut code_file, b"\n")?;
 		} else {
 			if name != "+page.minic" {
 				continue;
@@ -51,18 +61,14 @@ pub fn expand_project(output: &path::Path) -> error::Result<()> {
 
 			let (html, code) = transpiler::transpile(&input)?;
 
-			let content = PAGE_TEMPLATE.replace("{PAGE_ENTRY_POINT}", &code.init_fn).replace("{PAGE_BODY}", &html.html);
+			let code_content = code.code;
+			let html_content = PAGE_TEMPLATE.replace("{PAGE_ENTRY_POINT}", &code.init_fn).replace("{PAGE_BODY}", &html.html);
 
-			fs::write(output.join(&parent).join("index.html"), content)?;
+			let mut html_file = fs::File::create(html_path)?;
 
-			code.code
+			io::Write::write_all(&mut html_file, html_content.as_bytes())?;
+			io::Write::write_all(&mut code_file, code_content.as_bytes())?;
 		};
-
-		let module_file = if parent == src_path { "lib.rs" } else { "mod.rs" };
-		let mut module = fs::OpenOptions::new().append(true).open(output.join(parent).join(module_file))?;
-
-		io::Write::write_all(&mut module, code.as_bytes())?;
-		io::Write::write_all(&mut module, b"\n")?;
 	}
 
 	Ok(())
