@@ -135,30 +135,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "cargo-dominic"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "clap",
- "dominic-parser",
- "fastrand",
- "log",
- "notify",
- "prettyplease",
- "proc-macro2",
- "quote",
- "simple_logger",
- "syn 3.0.7",
- "thiserror",
- "tokio",
- "toml_edit",
- "tower-http",
- "walkdir",
- "wasm-bindgen-cli-support",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -249,6 +225,30 @@ name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
+
+[[package]]
+name = "dominic"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "dominic-parser",
+ "fastrand",
+ "log",
+ "notify",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "simple_logger",
+ "syn 3.0.7",
+ "thiserror",
+ "tokio",
+ "toml_edit",
+ "tower-http",
+ "walkdir",
+ "wasm-bindgen-cli-support",
+]
 
 [[package]]
 name = "dominic-parser"
